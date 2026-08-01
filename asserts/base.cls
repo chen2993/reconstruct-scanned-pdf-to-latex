@@ -3,7 +3,7 @@
 % Public environment, command, counter, label, and internal API names are
 % English ASCII identifiers; role macros may expand to localized display text.
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesClass{base}[2026/08/01 Semantic scanned-book class contract]
+\ProvidesClass{base}[2026/08/02 Semantic scanned-book class contract]
 
 \makeatletter
 
@@ -30,7 +30,6 @@
 
 \LoadClass[UTF8,openany]{ctexbook}
 \RequirePackage{amsmath,amssymb}
-\RequirePackage{environ}
 \RequirePackage{etoolbox}
 \RequirePackage{geometry}
 \RequirePackage{xcolor}
@@ -312,40 +311,49 @@
 
 \newcommand{\bookstylelabel}[1]{\textbf{#1}}
 \newcommand{\bookstylestructure}[2]{#1{#2}}
-\newcommand{\bookstylebody}[1]{#1}
-\newcommand{\bookstylematter}[3]{%
+
+% Streaming style hooks.  A project class redefines these begin/end pairs
+% instead of collecting an environment body.  This keeps a semantic owner
+% open across sequential \input files.
+\newcommand{\bookstylebodybegin}{}
+\newcommand{\bookstylebodyend}{}
+\newcommand{\bookstylematterbegin}[2]{%
   \par\medskip\noindent
   \ifstrempty{#2}{}{\bookstylelabel{#1}\space\bookstylelabel{#2}\par\smallskip}%
-  \bookstylebody{#3}\par\medskip
 }
-\newcommand{\bookstyleknowledge}[4]{%
+\newcommand{\bookstylematterend}{\par\medskip}
+\newcommand{\bookstyleknowledgebegin}[3]{%
   \par\medskip\noindent
   \bookstylelabel{#1}%
   \ifstrempty{#2}{}{\space\bookstylelabel{#2}}%
   \ifstrempty{#3}{}{\space（#3）}%
-  \quad\bookstylebody{#4}\par\medskip
+  \quad
 }
-\newcommand{\bookstylequestion}[4]{%
+\newcommand{\bookstyleknowledgeend}{\par\medskip}
+\newcommand{\bookstylequestionbegin}[3]{%
   \par\medskip\noindent
   \bookstylelabel{#1}%
   \ifstrempty{#2}{}{\space\bookstylelabel{#2}}%
   \ifstrempty{#3}{}{\space（#3）}%
-  \quad\bookstylebody{#4}\par
+  \quad
 }
-\newcommand{\bookstyleanswer}[3]{%
+\newcommand{\bookstylequestionend}{\par}
+\newcommand{\bookstyleanswerbegin}[2]{%
   \par\smallskip\noindent
   \bookstylelabel{#1}%
   \ifstrempty{#2}{}{\space（#2）}%
-  \quad\bookstylebody{#3}\par\smallskip
+  \quad
 }
-\newcommand{\bookstylecommentary}[3]{%
+\newcommand{\bookstyleanswerend}{\par\smallskip}
+\newcommand{\bookstylecommentarybegin}[2]{%
   \par\smallskip\noindent
   \bookstylelabel{#1}%
   \ifstrempty{#2}{}{\space（#2）}%
-  \quad\bookstylebody{#3}\par\smallskip
+  \quad
 }
-\newcommand{\bookstylemedia}[4]{%
-  \par\medskip\noindent #4%
+\newcommand{\bookstylecommentaryend}{\par\smallskip}
+\newcommand{\bookstylemediabegin}[3]{\par\medskip\noindent}
+\newcommand{\bookstylemediaend}[3]{%
   \ifstrempty{#3}{}{%
     \par\smallskip\noindent
     \bookstylelabel{#1}%
@@ -354,94 +362,76 @@
   }%
   \par\medskip
 }
-\newcommand{\bookstyleequation}[1]{\begin{equation}#1\end{equation}}
+\newcommand{\bookstyleequationbegin}{\begin{equation}}
+\newcommand{\bookstyleequationend}{\end{equation}}
 
 % --------------------------------------------------------------------------
-% Visibility-aware renderers. Owners may form a semantic tree. A parent controls
-% expansion; nested body blocks inherit context and specialized children apply
-% their own visibility rule.
+% Streaming semantic-owner support.  Do not replace these with body-capturing
+% definitions: a single \begin may be in pages/pages-001.tex and its matching
+% \end in a later sequential \input file.  When a selected owner is hidden,
+% its content is still expanded in a discarded box so nested counters, labels,
+% and semantic structure remain valid without leaking visible material.
 % --------------------------------------------------------------------------
-\newcommand{\book@renderbody}[1]{%
+\newif\ifbook@streamvisible
+\newif\ifbook@discarding
+\newif\ifbook@owncapture
+\newbox\book@discardbox
+\book@streamvisibletrue
+\book@discardingfalse
+
+\newcommand{\book@streambegin}[1]{%
+  \begingroup
+  \book@owncapturefalse
+  \ifbook@streamvisible
+    #1%
+  \else
+    \book@streamvisiblefalse
+  \fi
+  \ifbook@streamvisible\else
+    \ifbook@discarding\else
+      \book@owncapturetrue
+      \book@discardingtrue
+      \setbox\book@discardbox=\vbox\bgroup
+    \fi
+  \fi
+}
+\newcommand{\book@streamend}{%
+  \ifbook@owncapture\egroup\fi
+  \endgroup
+}
+
+\newcommand{\book@selectvisiblebody}{%
+  \book@streamvisiblefalse
   \ifbook@showbody
-    \bookstylebody{#1}%
+    \book@streamvisibletrue
   \else\ifbook@insideknowledge
-    \bookstylebody{#1}%
+    \book@streamvisibletrue
   \else\ifbook@insidequestion
-    \bookstylebody{#1}%
+    \book@streamvisibletrue
   \else\ifbook@insideanswer
-    \bookstylebody{#1}%
+    \book@streamvisibletrue
   \fi\fi\fi\fi
 }
-
-\newcommand{\book@renderknowledge}[4]{%
-  \ifbook@showknowledge
-    \begingroup
-      \book@insideknowledgetrue
-      \bookstyleknowledge{#1}{#2}{#3}{#4}%
-    \endgroup
-  \fi
+\newcommand{\book@selectvisiblematter}{%
+  \ifbook@showmatter\book@streamvisibletrue\else\book@streamvisiblefalse\fi
 }
-
-\newcommand{\book@renderknowledgeprose}[1]{%
-  \ifbook@showknowledge
-    \begingroup
-      \book@insideknowledgetrue
-      \bookstylebody{#1}%
-    \endgroup
-  \fi
+\newcommand{\book@selectvisibleknowledge}{%
+  \ifbook@showknowledge\book@streamvisibletrue\else\book@streamvisiblefalse\fi
 }
-
-\newcommand{\book@rendermatter}[3]{%
-  \ifbook@showmatter
-    \bookstylematter{#1}{#2}{#3}%
-  \fi
+\newcommand{\book@selectvisibleproof}{%
+  \ifbook@showproofs\book@streamvisibletrue\else\book@streamvisiblefalse\fi
 }
-
-\newcommand{\book@renderproof}[2]{%
-  \ifbook@showproofs
-    \begingroup
-      \book@insideknowledgetrue
-      \bookstyleanswer{\bookroleproof}{#1}{#2}%
-    \endgroup
-  \fi
+\newcommand{\book@selectvisiblequestion}{%
+  \ifbook@selectedquestion\book@streamvisibletrue\else\book@streamvisiblefalse\fi
 }
-
-\newcommand{\book@renderquestionsegment}[4]{%
-  \ifbook@selectedquestion
-    \begingroup
-      \book@insidequestiontrue
-      \bookstylequestion{#1}{#2}{#3}{#4}%
-    \endgroup
-  \fi
+\newcommand{\book@selectvisibleanswer}{%
+  \ifbook@selectedanswer\book@streamvisibletrue\else\book@streamvisiblefalse\fi
 }
-
-\newcommand{\book@renderquestionterminal}[4]{%
-  \book@renderquestionsegment{#1}{#2}{#3}{#4}%
-  \ifbook@selectedquestion
-    \ifbook@workbook\book@answerspace\fi
-  \fi
+\newcommand{\book@selectvisiblecommentary}{%
+  \ifbook@showcommentary\book@streamvisibletrue\else\book@streamvisiblefalse\fi
 }
-
-\newcommand{\book@renderanswer}[3]{%
-  \book@selectanswer
-  \ifbook@selectedanswer
-    \begingroup
-      \book@insideanswertrue
-      \bookstyleanswer{#1}{#2}{#3}%
-    \endgroup
-  \fi
-}
-
-\newcommand{\book@rendercommentary}[3]{%
-  \ifbook@showcommentary
-    \bookstylecommentary{#1}{#2}{#3}%
-  \fi
-}
-
-\newcommand{\book@rendermedia}[4]{%
-  \ifbook@showmedia
-    \bookstylemedia{#1}{#2}{#3}{#4}%
-  \fi
+\newcommand{\book@selectvisiblemedia}{%
+  \ifbook@showmedia\book@streamvisibletrue\else\book@streamvisiblefalse\fi
 }
 
 % --------------------------------------------------------------------------
@@ -499,76 +489,91 @@
 \newcommand{\booksubsubsection}[1]{\ifbook@showstructure\bookstylestructure{\subsubsection}{#1}\fi}
 \newcommand{\bookparagraph}[1]{\ifbook@showstructure\bookstylestructure{\paragraph}{#1}\fi}
 
-\NewEnviron{bookbody}{\book@renderbody{\BODY}}
-\NewEnviron{booktext}{\book@renderbody{\BODY}}
-\NewEnviron{bookexposition}{\book@renderbody{\BODY}}
-\NewEnviron{textbookexposition}{\book@renderbody{\BODY}}
-\NewEnviron{bookfrontmatterblock}[1][]{%
-  \book@rendermatter{\bookrolefrontmatter}{#1}{\BODY}%
+\newcommand{\book@beginbody}{%
+  \book@streambegin{\book@selectvisiblebody}%
+  \ifbook@streamvisible\bookstylebodybegin\fi
 }
-\NewEnviron{bookbackmatterblock}[1][]{%
-  \book@rendermatter{\bookrolebackmatter}{#1}{\BODY}%
+\newcommand{\book@endbody}{%
+  \ifbook@streamvisible\bookstylebodyend\fi
+  \book@streamend
 }
-\NewEnviron{booksupplement}[1][]{%
-  \book@rendermatter{\bookrolesupplement}{#1}{\BODY}%
+\newcommand{\book@beginmatter}[2]{%
+  \book@streambegin{\book@selectvisiblematter}%
+  \ifbook@streamvisible\bookstylematterbegin{#1}{#2}\fi
 }
-\NewEnviron{bookknowledgeprose}{\book@renderknowledgeprose{\BODY}}
-\NewEnviron{knowledgeprose}{\book@renderknowledgeprose{\BODY}}
-
-\NewEnviron{bookknowledgeblock}[1][]{%
-  \book@renderknowledge{\bookroleknowledge}{}{#1}{\BODY}%
+\newcommand{\book@endmatter}{%
+  \ifbook@streamvisible\bookstylematterend\fi
+  \book@streamend
 }
-\NewEnviron{bookknowledgeblockopen}[1][]{%
-  \book@renderknowledge{\bookroleknowledge}{}{#1}{\BODY}%
+\newcommand{\book@beginknowledge}[3]{%
+  \book@streambegin{\book@selectvisibleknowledge}%
+  \ifbook@streamvisible
+    \book@insideknowledgetrue
+    \bookstyleknowledgebegin{#1}{#2}{#3}%
+  \fi
 }
-\NewEnviron{bookknowledgeblockmiddle}[1][]{%
-  \book@renderknowledge{\bookroleknowledge}{}{#1}{\BODY}%
+\newcommand{\book@endknowledge}{%
+  \ifbook@streamvisible\bookstyleknowledgeend\fi
+  \book@streamend
 }
-\NewEnviron{bookknowledgeblockcontinued}[1][]{%
-  \book@renderknowledge{\bookroleknowledge}{}{#1}{\BODY}%
+\newcommand{\book@beginproof}[1]{%
+  \book@streambegin{\book@selectvisibleproof}%
+  \ifbook@streamvisible
+    \book@insideknowledgetrue
+    \bookstyleanswerbegin{\bookroleproof}{#1}%
+  \fi
 }
-\NewEnviron{knowledgeblock}[1][]{%
-  \book@renderknowledge{\bookroleknowledge}{}{#1}{\BODY}%
-}
-\NewEnviron{knowledgeblockopen}[1][]{%
-  \book@renderknowledge{\bookroleknowledge}{}{#1}{\BODY}%
-}
-\NewEnviron{knowledgeblockmiddle}[1][]{%
-  \book@renderknowledge{\bookroleknowledge}{}{#1}{\BODY}%
-}
-\NewEnviron{knowledgeblockcontinued}[1][]{%
-  \book@renderknowledge{\bookroleknowledge}{}{#1}{\BODY}%
+\newcommand{\book@endproof}{%
+  \ifbook@streamvisible\bookstyleanswerend\fi
+  \book@streamend
 }
 
-\NewEnviron{bookdefinition}[1][]{%
-  \refstepcounter{bookdefinition}%
-  \book@renderknowledge{\bookroledefinition}{\thebookdefinition}{#1}{\BODY}%
+\newenvironment{bookbody}{\book@beginbody}{\book@endbody}
+\newenvironment{booktext}{\book@beginbody}{\book@endbody}
+\newenvironment{bookexposition}{\book@beginbody}{\book@endbody}
+\newenvironment{textbookexposition}{\book@beginbody}{\book@endbody}
+\newenvironment{bookfrontmatterblock}[1][]%
+  {\book@beginmatter{\bookrolefrontmatter}{#1}}{\book@endmatter}
+\newenvironment{bookbackmatterblock}[1][]%
+  {\book@beginmatter{\bookrolebackmatter}{#1}}{\book@endmatter}
+\newenvironment{booksupplement}[1][]%
+  {\book@beginmatter{\bookrolesupplement}{#1}}{\book@endmatter}
+\newenvironment{bookknowledgeprose}{%
+  \book@streambegin{\book@selectvisibleknowledge}%
+  \ifbook@streamvisible\book@insideknowledgetrue\bookstylebodybegin\fi
+}{%
+  \ifbook@streamvisible\bookstylebodyend\fi
+  \book@streamend
 }
-\NewEnviron{booktheorem}[1][]{%
-  \refstepcounter{booktheorem}%
-  \book@renderknowledge{\bookroletheorem}{\thebooktheorem}{#1}{\BODY}%
-}
-\NewEnviron{booklemma}[1][]{%
-  \refstepcounter{booklemma}%
-  \book@renderknowledge{\bookrolelemma}{\thebooklemma}{#1}{\BODY}%
-}
-\NewEnviron{bookproposition}[1][]{%
-  \refstepcounter{bookproposition}%
-  \book@renderknowledge{\bookroleproposition}{\thebookproposition}{#1}{\BODY}%
-}
-\NewEnviron{bookcorollary}[1][]{%
-  \refstepcounter{bookcorollary}%
-  \book@renderknowledge{\bookrolecorollary}{\thebookcorollary}{#1}{\BODY}%
-}
-\NewEnviron{bookproperty}[1][]{%
-  \refstepcounter{bookproperty}%
-  \book@renderknowledge{\bookroleproperty}{\thebookproperty}{#1}{\BODY}%
-}
-\NewEnviron{bookconcept}[1][]{%
-  \refstepcounter{bookconcept}%
-  \book@renderknowledge{\bookroleconcept}{\thebookconcept}{#1}{\BODY}%
-}
-\NewEnviron{bookproof}[1][]{\book@renderproof{#1}{\BODY}}
+\newenvironment{knowledgeprose}{\begin{bookknowledgeprose}}{\end{bookknowledgeprose}}
+\newenvironment{bookknowledgeblock}[1][]%
+  {\book@beginknowledge{\bookroleknowledge}{}{#1}}{\book@endknowledge}
+\newenvironment{knowledgeblock}[1][]%
+  {\book@beginknowledge{\bookroleknowledge}{}{#1}}{\book@endknowledge}
+
+\newenvironment{bookdefinition}[1][]%
+  {\refstepcounter{bookdefinition}\book@beginknowledge{\bookroledefinition}{\thebookdefinition}{#1}}%
+  {\book@endknowledge}
+\newenvironment{booktheorem}[1][]%
+  {\refstepcounter{booktheorem}\book@beginknowledge{\bookroletheorem}{\thebooktheorem}{#1}}%
+  {\book@endknowledge}
+\newenvironment{booklemma}[1][]%
+  {\refstepcounter{booklemma}\book@beginknowledge{\bookrolelemma}{\thebooklemma}{#1}}%
+  {\book@endknowledge}
+\newenvironment{bookproposition}[1][]%
+  {\refstepcounter{bookproposition}\book@beginknowledge{\bookroleproposition}{\thebookproposition}{#1}}%
+  {\book@endknowledge}
+\newenvironment{bookcorollary}[1][]%
+  {\refstepcounter{bookcorollary}\book@beginknowledge{\bookrolecorollary}{\thebookcorollary}{#1}}%
+  {\book@endknowledge}
+\newenvironment{bookproperty}[1][]%
+  {\refstepcounter{bookproperty}\book@beginknowledge{\bookroleproperty}{\thebookproperty}{#1}}%
+  {\book@endknowledge}
+\newenvironment{bookconcept}[1][]%
+  {\refstepcounter{bookconcept}\book@beginknowledge{\bookroleconcept}{\thebookconcept}{#1}}%
+  {\book@endknowledge}
+\newenvironment{bookproof}[1][]%
+  {\book@beginproof{#1}}{\book@endproof}
 
 \newlength{\bookworkbookanswerspace}
 \setlength{\bookworkbookanswerspace}{0.22\textheight}
@@ -577,129 +582,131 @@
   \par\nobreak\vspace{\bookworkbookanswerspace}\par
 }
 
-\NewEnviron{bookexample}[1][]{%
-  \refstepcounter{bookexample}%
-  \book@resetquestionchildren
-  \book@selectexample
-  \book@renderquestionterminal{\bookroleexample}{\thebookexample}{#1}{\BODY}%
-}
-\NewEnviron{bookexamplestart}[1][]{%
-  \refstepcounter{bookexample}%
-  \book@resetquestionchildren
-  \book@selectexample
-  \book@renderquestionsegment{\bookroleexample}{\thebookexample}{#1}{\BODY}%
-}
-\NewEnviron{bookexamplecontinuation}[1][]{%
-  \book@selectexample
-  \book@renderquestionsegment{\bookroleexample}{\thebookexample}{#1}{\BODY}%
-}
-\NewEnviron{bookexampleend}[1][]{%
-  \book@selectexample
-  \book@renderquestionterminal{\bookroleexample}{\thebookexample}{#1}{\BODY}%
-}
-
-\NewEnviron{bookexercise}[1][]{%
-  \refstepcounter{bookexercise}%
-  \book@resetquestionchildren
-  \book@selectexercise
-  \book@renderquestionterminal{\bookroleexercise}{\thebookexercise}{#1}{\BODY}%
-}
-\NewEnviron{bookexercisestart}[1][]{%
-  \refstepcounter{bookexercise}%
-  \book@resetquestionchildren
-  \book@selectexercise
-  \book@renderquestionsegment{\bookroleexercise}{\thebookexercise}{#1}{\BODY}%
-}
-\NewEnviron{bookexercisecontinuation}[1][]{%
-  \book@selectexercise
-  \book@renderquestionsegment{\bookroleexercise}{\thebookexercise}{#1}{\BODY}%
-}
-\NewEnviron{bookexerciseend}[1][]{%
-  \book@selectexercise
-  \book@renderquestionterminal{\bookroleexercise}{\thebookexercise}{#1}{\BODY}%
-}
-
-\NewEnviron{bookquestion}[1][]{%
-  \refstepcounter{bookquestion}%
-  \book@resetquestionchildren
-  \book@selectgenericquestion
-  \book@renderquestionterminal{\bookrolequestion}{\thebookquestion}{#1}{\BODY}%
-}
-\NewEnviron{bookquestionstart}[1][]{%
-  \refstepcounter{bookquestion}%
-  \book@resetquestionchildren
-  \book@selectgenericquestion
-  \book@renderquestionsegment{\bookrolequestion}{\thebookquestion}{#1}{\BODY}%
-}
-\NewEnviron{bookquestioncontinuation}[1][]{%
-  \book@selectgenericquestion
-  \book@renderquestionsegment{\bookrolequestion}{\thebookquestion}{#1}{\BODY}%
-}
-\NewEnviron{bookquestionend}[1][]{%
-  \book@selectgenericquestion
-  \book@renderquestionterminal{\bookrolequestion}{\thebookquestion}{#1}{\BODY}%
-}
-
-% Answer owners may be nested in their question owner or follow it as siblings.
-% Their visibility follows the question kind, so example-only views do not leak
-% exercise answers and workbook builds retain the question while hiding answers.
-\NewEnviron{bookanswer}[1][]{\book@renderanswer{\bookroleanswer}{#1}{\BODY}}
-\NewEnviron{booksolution}[1][]{\book@renderanswer{\bookrolesolution}{#1}{\BODY}}
-\NewEnviron{bookanalysis}[1][]{\book@renderanswer{\bookroleanalysis}{#1}{\BODY}}
-\NewEnviron{bookhint}[1][]{\book@renderanswer{\bookrolehint}{#1}{\BODY}}
-
-\NewEnviron{bookmethodstep}[1][]{%
-  \refstepcounter{bookmethodstep}%
-  \book@renderanswer{\bookrolemethod\space\arabic{bookmethodstep}}{#1}{\BODY}%
-}
-\NewEnviron{bookproofstep}[1][]{%
-  \refstepcounter{bookproofstep}%
-  \book@renderanswer{\bookroleproof\space\arabic{bookproofstep}}{#1}{\BODY}%
-}
-\NewEnviron{bookanalysisstep}[1][]{%
-  \refstepcounter{bookanalysisstep}%
-  \book@renderanswer{\bookroleanalysis\space\arabic{bookanalysisstep}}{#1}{\BODY}%
-}
-\NewEnviron{booksolutionstep}[1][]{%
-  \refstepcounter{booksolutionstep}%
-  \book@renderanswer{\bookrolestep\space\arabic{booksolutionstep}}{#1}{\BODY}%
-}
-\NewEnviron{bookcase}[1][]{%
-  \refstepcounter{bookcase}%
-  \book@renderanswer{\bookrolecase\space\thebookcase}{#1}{\BODY}%
-}
-
-\NewEnviron{bookremark}[1][]{\book@rendercommentary{\bookroleremark}{#1}{\BODY}}
-\NewEnviron{booknote}[1][]{\book@rendercommentary{\bookrolenote}{#1}{\BODY}}
-\NewEnviron{booktip}[1][]{\book@rendercommentary{\bookroletip}{#1}{\BODY}}
-\NewEnviron{bookwarning}[1][]{\book@rendercommentary{\bookrolewarning}{#1}{\BODY}}
-\NewEnviron{booksummary}[1][]{\book@rendercommentary{\bookrolesummary}{#1}{\BODY}}
-
-\NewEnviron{bookfigure}[1][]{%
-  \refstepcounter{bookfigure}%
-  \book@rendermedia{\bookrolefigure}{\thebookfigure}{#1}{\BODY}%
-}
-\NewEnviron{booktable}[1][]{%
-  \refstepcounter{booktable}%
-  \book@rendermedia{\bookroletable}{\thebooktable}{#1}{\BODY}%
-}
-\NewEnviron{bookalgorithm}[1][]{%
-  \refstepcounter{bookalgorithm}%
-  \book@rendermedia{\bookrolealgorithm}{\thebookalgorithm}{#1}{\BODY}%
-}
-\NewEnviron{bookequation}{%
-  \ifbook@showmedia
-    \bookstyleequation{\BODY}%
-  \else
-    \refstepcounter{equation}%
+\newcommand{\book@beginquestion}[4]{%
+  #1%
+  \book@streambegin{\book@selectvisiblequestion}%
+  \ifbook@streamvisible
+    \book@insidequestiontrue
+    \bookstylequestionbegin{#2}{#3}{#4}%
   \fi
 }
-\NewEnviron{bookformula}{%
-  \ifbook@showmedia
-    \bookstyleequation{\BODY}%
-  \else
-    \refstepcounter{equation}%
+\newcommand{\book@endquestion}{%
+  \ifbook@streamvisible
+    \bookstylequestionend
+    \ifbook@workbook\book@answerspace\fi
   \fi
+  \book@streamend
+}
+
+% A logical question is one streaming environment.  It may begin in one page
+% source file and end in any later file reached by the same \bookinput call.
+% Counters are advanced only here at \begin time; answer space is emitted only
+% in \book@endquestion.
+\newenvironment{bookexample}[1][]%
+  {\refstepcounter{bookexample}\book@resetquestionchildren\book@beginquestion{\book@selectexample}{\bookroleexample}{\thebookexample}{#1}}%
+  {\book@endquestion}
+\newenvironment{bookexercise}[1][]%
+  {\refstepcounter{bookexercise}\book@resetquestionchildren\book@beginquestion{\book@selectexercise}{\bookroleexercise}{\thebookexercise}{#1}}%
+  {\book@endquestion}
+\newenvironment{bookquestion}[1][]%
+  {\refstepcounter{bookquestion}\book@resetquestionchildren\book@beginquestion{\book@selectgenericquestion}{\bookrolequestion}{\thebookquestion}{#1}}%
+  {\book@endquestion}
+
+% Answer owners may be nested in their question owner or follow it as
+% siblings.  They are also streaming so a long solution can cross a source
+% page boundary without a second public fragment environment.
+\newcommand{\book@beginanswer}[2]{%
+  \book@selectanswer
+  \book@streambegin{\book@selectvisibleanswer}%
+  \ifbook@streamvisible
+    \book@insideanswertrue
+    \bookstyleanswerbegin{#1}{#2}%
+  \fi
+}
+\newcommand{\book@endanswer}{%
+  \ifbook@streamvisible\bookstyleanswerend\fi
+  \book@streamend
+}
+\newenvironment{bookanswer}[1][]%
+  {\book@beginanswer{\bookroleanswer}{#1}}{\book@endanswer}
+\newenvironment{booksolution}[1][]%
+  {\book@beginanswer{\bookrolesolution}{#1}}{\book@endanswer}
+\newenvironment{bookanalysis}[1][]%
+  {\book@beginanswer{\bookroleanalysis}{#1}}{\book@endanswer}
+\newenvironment{bookhint}[1][]%
+  {\book@beginanswer{\bookrolehint}{#1}}{\book@endanswer}
+\newenvironment{bookmethodstep}[1][]%
+  {\refstepcounter{bookmethodstep}\book@beginanswer{\bookrolemethod\space\arabic{bookmethodstep}}{#1}}%
+  {\book@endanswer}
+\newenvironment{bookproofstep}[1][]%
+  {\refstepcounter{bookproofstep}\book@beginanswer{\bookroleproof\space\arabic{bookproofstep}}{#1}}%
+  {\book@endanswer}
+\newenvironment{bookanalysisstep}[1][]%
+  {\refstepcounter{bookanalysisstep}\book@beginanswer{\bookroleanalysis\space\arabic{bookanalysisstep}}{#1}}%
+  {\book@endanswer}
+\newenvironment{booksolutionstep}[1][]%
+  {\refstepcounter{booksolutionstep}\book@beginanswer{\bookrolestep\space\arabic{booksolutionstep}}{#1}}%
+  {\book@endanswer}
+\newenvironment{bookcase}[1][]%
+  {\refstepcounter{bookcase}\book@beginanswer{\bookrolecase\space\thebookcase}{#1}}%
+  {\book@endanswer}
+
+\newcommand{\book@begincommentary}[2]{%
+  \book@streambegin{\book@selectvisiblecommentary}%
+  \ifbook@streamvisible\bookstylecommentarybegin{#1}{#2}\fi
+}
+\newcommand{\book@endcommentary}{%
+  \ifbook@streamvisible\bookstylecommentaryend\fi
+  \book@streamend
+}
+\newenvironment{bookremark}[1][]%
+  {\book@begincommentary{\bookroleremark}{#1}}{\book@endcommentary}
+\newenvironment{booknote}[1][]%
+  {\book@begincommentary{\bookrolenote}{#1}}{\book@endcommentary}
+\newenvironment{booktip}[1][]%
+  {\book@begincommentary{\bookroletip}{#1}}{\book@endcommentary}
+\newenvironment{bookwarning}[1][]%
+  {\book@begincommentary{\bookrolewarning}{#1}}{\book@endcommentary}
+\newenvironment{booksummary}[1][]%
+  {\book@begincommentary{\bookrolesummary}{#1}}{\book@endcommentary}
+
+\newcommand{\book@beginmedia}[3]{%
+  \book@streambegin{\book@selectvisiblemedia}%
+  \ifbook@streamvisible
+    \def\book@media@role{#1}%
+    \edef\book@media@number{#2}%
+    \def\book@media@title{#3}%
+    \bookstylemediabegin{#1}{#2}{#3}%
+  \fi
+}
+\newcommand{\book@endmedia}{%
+  \ifbook@streamvisible
+    \bookstylemediaend{\book@media@role}{\book@media@number}{\book@media@title}%
+  \fi
+  \book@streamend
+}
+\newenvironment{bookfigure}[1][]%
+  {\refstepcounter{bookfigure}\book@beginmedia{\bookrolefigure}{\thebookfigure}{#1}}%
+  {\book@endmedia}
+\newenvironment{booktable}[1][]%
+  {\refstepcounter{booktable}\book@beginmedia{\bookroletable}{\thebooktable}{#1}}%
+  {\book@endmedia}
+\newenvironment{bookalgorithm}[1][]%
+  {\refstepcounter{bookalgorithm}\book@beginmedia{\bookrolealgorithm}{\thebookalgorithm}{#1}}%
+  {\book@endmedia}
+\newenvironment{bookequation}{%
+  \book@beginmedia{equation}{}{}%
+  \bookstyleequationbegin
+}{%
+  \bookstyleequationend
+  \book@endmedia
+}
+\newenvironment{bookformula}{%
+  \book@beginmedia{formula}{}{}%
+  \bookstyleequationbegin
+}{%
+  \bookstyleequationend
+  \book@endmedia
 }
 
 % --------------------------------------------------------------------------

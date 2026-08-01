@@ -33,16 +33,7 @@ DEFAULT_OWNER_ENVIRONMENTS = frozenset(
         "bookknowledgeprose",
         "knowledgeprose",
         "bookknowledgeblock",
-        "bookknowledgeblockopen",
-        "bookknowledgeblockmiddle",
-        "bookknowledgeblockcontinued",
         "knowledgeblock",
-        "knowledgeblockopen",
-        "knowledgeblockmiddle",
-        "knowledgeblockcontinued",
-        "bookknowledgeopen",
-        "bookknowledgemiddle",
-        "bookknowledgecontinued",
         "bookdefinition",
         "booktheorem",
         "booklemma",
@@ -52,17 +43,8 @@ DEFAULT_OWNER_ENVIRONMENTS = frozenset(
         "bookconcept",
         "bookproof",
         "bookexample",
-        "bookexamplestart",
-        "bookexamplecontinuation",
-        "bookexampleend",
         "bookexercise",
-        "bookexercisestart",
-        "bookexercisecontinuation",
-        "bookexerciseend",
         "bookquestion",
-        "bookquestionstart",
-        "bookquestioncontinuation",
-        "bookquestionend",
         "bookanswer",
         "booksolution",
         "bookanalysis",
@@ -154,17 +136,8 @@ DEFAULT_ANSWER_OWNER_ENVIRONMENTS = frozenset(
 DEFAULT_QUESTION_OWNER_ENVIRONMENTS = frozenset(
     {
         "bookexample",
-        "bookexamplestart",
-        "bookexamplecontinuation",
-        "bookexampleend",
         "bookexercise",
-        "bookexercisestart",
-        "bookexercisecontinuation",
-        "bookexerciseend",
         "bookquestion",
-        "bookquestionstart",
-        "bookquestioncontinuation",
-        "bookquestionend",
     }
 )
 
@@ -172,35 +145,14 @@ DEFAULT_ANSWER_MEDIA_ENVIRONMENTS = frozenset(
     {"answerfigure", "solutionfigure", "bookanswerfigure", "booksolutionfigure"}
 )
 
-KNOWLEDGE_STEPS = {
-    "bookknowledgeblockopen": ("knowledge", "start"),
-    "bookknowledgeblockmiddle": ("knowledge", "middle"),
-    "bookknowledgeblockcontinued": ("knowledge", "end"),
-    "knowledgeblockopen": ("knowledge", "start"),
-    "knowledgeblockmiddle": ("knowledge", "middle"),
-    "knowledgeblockcontinued": ("knowledge", "end"),
-    "bookknowledgeopen": ("knowledge", "start"),
-    "bookknowledgemiddle": ("knowledge", "middle"),
-    "bookknowledgecontinued": ("knowledge", "end"),
-}
-
-QUESTION_STEPS = {
-    "bookexamplestart": ("example", "start"),
-    "bookexamplecontinuation": ("example", "middle"),
-    "bookexampleend": ("example", "end"),
-    "bookexercisestart": ("exercise", "start"),
-    "bookexercisecontinuation": ("exercise", "middle"),
-    "bookexerciseend": ("exercise", "end"),
-    "bookquestionstart": ("question", "start"),
-    "bookquestioncontinuation": ("question", "middle"),
-    "bookquestionend": ("question", "end"),
-}
+DEFAULT_CROSS_PAGE_OWNER_ENVIRONMENTS = frozenset()
 
 
 @dataclass(frozen=True)
 class AuditConfig:
     owner_environments: frozenset[str]
     owner_parent_environments: dict[str, frozenset[str]]
+    cross_page_owner_environments: frozenset[str]
     structure_commands: frozenset[str]
     media_environments: frozenset[str]
     answer_owner_environments: frozenset[str]
@@ -227,32 +179,12 @@ class Issue:
 
 
 @dataclass(frozen=True)
-class Event:
+class EnvironmentFrame:
+    name: str
     path: str
     line: int
     column: int
-    name: str
-
-
-@dataclass(frozen=True)
-class PageAudit:
-    path: Path
-    relative_path: str
-    owner_events: tuple[Event, ...]
-
-
-@dataclass(frozen=True)
-class EnvironmentFrame:
-    name: str
-    line: int
-    column: int
     is_owner: bool
-
-
-@dataclass(frozen=True)
-class SequenceState:
-    family: str
-    event: Event
 
 
 class ConfigurationError(RuntimeError):
@@ -355,6 +287,7 @@ def load_config(project: Path) -> tuple[AuditConfig, Path | None]:
         allowed = {
             "owner_environments",
             "owner_parent_environments",
+            "cross_page_owner_environments",
             "structure_commands",
             "media_environments",
             "answer_owner_environments",
@@ -373,6 +306,12 @@ def load_config(project: Path) -> tuple[AuditConfig, Path | None]:
     config = AuditConfig(
         owner_environments=owner_environments,
         owner_parent_environments=_configured_owner_parents(payload, owner_environments),
+        cross_page_owner_environments=_configured_set(
+            payload,
+            "cross_page_owner_environments",
+            DEFAULT_CROSS_PAGE_OWNER_ENVIRONMENTS,
+            ENVIRONMENT_NAME,
+        ),
         structure_commands=_configured_set(
             payload, "structure_commands", DEFAULT_STRUCTURE_COMMANDS, COMMAND_NAME
         ),
@@ -400,6 +339,9 @@ def load_config(project: Path) -> tuple[AuditConfig, Path | None]:
     )
     missing_answers = config.answer_owner_environments - config.owner_environments
     missing_questions = config.question_owner_environments - config.owner_environments
+    missing_cross_page_owners = (
+        config.cross_page_owner_environments - config.owner_environments
+    )
     missing_answer_media = config.answer_media_environments - config.media_environments
     if missing_answers:
         raise ConfigurationError(
@@ -410,6 +352,11 @@ def load_config(project: Path) -> tuple[AuditConfig, Path | None]:
         raise ConfigurationError(
             "question_owner_environments 也必须属于 owner_environments: "
             f"{sorted(missing_questions)}"
+        )
+    if missing_cross_page_owners:
+        raise ConfigurationError(
+            "cross_page_owner_environments 也必须属于 owner_environments: "
+            f"{sorted(missing_cross_page_owners)}"
         )
     if missing_answer_media:
         raise ConfigurationError(
@@ -509,13 +456,15 @@ def add_issue(
     issues.append(Issue(relative, line, column, code, message))
 
 
-def audit_page(
+def audit_source(
     path: Path,
     project: Path,
     config: AuditConfig,
     issues: list[Issue],
+    stack: list[EnvironmentFrame],
     seen_question: bool,
-) -> tuple[PageAudit, bool]:
+) -> bool:
+    """Audit one source file while preserving the project-wide environment stack."""
     relative = path.relative_to(project).as_posix()
     try:
         original = path.read_text(encoding="utf-8")
@@ -523,8 +472,6 @@ def audit_page(
         raise ConfigurationError(f"无法读取 UTF-8 逐页文件 {path}: {exc}") from exc
     text = strip_comments(original)
     newlines = [index for index, character in enumerate(text) if character == "\n"]
-    stack: list[EnvironmentFrame] = []
-    events: list[Event] = []
     index = 0
 
     while index < len(text):
@@ -681,9 +628,7 @@ def audit_page(
                         f"题目所有者 {environment!r} 嵌套在答案所有者内",
                     )
                 seen_question = True
-            if not stack and is_owner:
-                events.append(Event(relative, line, column, environment))
-            stack.append(EnvironmentFrame(environment, line, column, is_owner))
+            stack.append(EnvironmentFrame(environment, relative, line, column, is_owner))
             continue
 
         if not stack:
@@ -711,17 +656,7 @@ def audit_page(
             continue
         index = cursor
 
-    for frame in reversed(stack):
-        issues.append(
-            Issue(
-                relative,
-                frame.line,
-                frame.column,
-                "unclosed_environment",
-                f"环境 {frame.name!r} 未在本文件内闭合",
-            )
-        )
-    return PageAudit(path, relative, tuple(events)), seen_question
+    return seen_question
 
 
 def page_sort_key(path: Path, section_index: int) -> tuple[int, int, str]:
@@ -732,6 +667,7 @@ def page_sort_key(path: Path, section_index: int) -> tuple[int, int, str]:
 
 def collect_pages(project: Path) -> list[Path]:
     latex = project / "latex"
+    # The canonical source stream is front, then numbered body pages, then back.
     sections = ("front", "pages", "back")
     pages: list[Path] = []
     for section_index, section in enumerate(sections):
@@ -745,99 +681,48 @@ def collect_pages(project: Path) -> list[Path]:
     return pages
 
 
-def audit_sequence(
-    pages: list[PageAudit],
-    steps: dict[str, tuple[str, str]],
-    label: str,
+def audit_file_boundary(
+    source: Path,
+    project: Path,
+    stack: list[EnvironmentFrame],
+    config: AuditConfig,
     issues: list[Issue],
 ) -> None:
-    state: SequenceState | None = None
-    for page in pages:
-        events = page.owner_events
-        if state is not None:
-            first = events[0] if events else None
-            first_step = steps.get(first.name) if first is not None else None
-            if first_step is None or first_step[0] != state.family or first_step[1] not in {
-                "middle",
-                "end",
-            }:
-                issues.append(
-                    Issue(
-                        state.event.path,
-                        state.event.line,
-                        state.event.column,
-                        f"missing_{label}_continuation",
-                        f"{page.relative_path} 页首缺少 {state.family} 的续段或结束段",
-                    )
-                )
-                state = None
+    """Require each environment left open by ``source`` to be a streaming owner.
 
-        for position, event in enumerate(events):
-            step = steps.get(event.name)
-            if step is None:
-                continue
-            family, phase = step
-            if phase == "start":
-                if state is not None:
-                    issues.append(
-                        Issue(
-                            event.path,
-                            event.line,
-                            event.column,
-                            f"overlapping_{label}_sequence",
-                            f"{event.name!r} 在上一个 {state.family} 跨页序列结束前再次开始",
-                        )
-                    )
-                state = SequenceState(family, event)
-            elif state is None or state.family != family:
-                issues.append(
-                    Issue(
-                        event.path,
-                        event.line,
-                        event.column,
-                        f"orphan_{label}_{phase}",
-                        f"{event.name!r} 没有匹配的 {family} 开始段",
-                    )
-                )
-                continue
-            elif state.event.path == event.path:
-                issues.append(
-                    Issue(
-                        event.path,
-                        event.line,
-                        event.column,
-                        f"same_file_{label}_{phase}",
-                        f"{event.name!r} 必须续接前一个逐页文件中的序列",
-                    )
-                )
-                if phase == "end":
-                    state = None
-                else:
-                    state = SequenceState(family, event)
-            elif phase == "end":
-                state = None
-            else:
-                state = SequenceState(family, event)
-
-            if phase in {"start", "middle"} and position != len(events) - 1:
-                issues.append(
-                    Issue(
-                        event.path,
-                        event.line,
-                        event.column,
-                        f"{label}_segment_not_last",
-                        f"{event.name!r} 必须是本页最后一个顶层所有者",
-                    )
-                )
-
-    if state is not None:
+    An open frame remains on ``stack`` so the next source file can supply its
+    real ``\\end`` token.  Reporting only frames opened in this source avoids
+    repeating the same cross-boundary error on every later file.
+    """
+    relative = source.relative_to(project).as_posix()
+    for frame in stack:
+        if frame.path != relative:
+            continue
+        if frame.is_owner and frame.name in config.cross_page_owner_environments:
+            continue
         issues.append(
             Issue(
-                state.event.path,
-                state.event.line,
-                state.event.column,
-                f"unclosed_{label}_sequence",
-                f"{state.family} 跨页序列缺少结束段",
+                frame.path,
+                frame.line,
+                frame.column,
+                "cross_page_environment_not_allowed",
+                f"环境 {frame.name!r} 跨越源文件边界；只有 "
+                "cross_page_owner_environments 中显式登记的语义所有者可以跨页",
+            )
+        )
+
+
+def audit_unclosed_environments(
+    stack: list[EnvironmentFrame], issues: list[Issue]
+) -> None:
+    for frame in reversed(stack):
+        issues.append(
+            Issue(
+                frame.path,
+                frame.line,
+                frame.column,
+                "unclosed_environment",
+                f"环境 {frame.name!r} 未在完整源文件流内闭合",
             )
         )
 
@@ -845,14 +730,24 @@ def audit_sequence(
 def audit_project(project: Path, config: AuditConfig) -> tuple[list[Path], list[Issue]]:
     pages = collect_pages(project)
     issues: list[Issue] = []
-    audits: list[PageAudit] = []
+    stack: list[EnvironmentFrame] = []
     seen_question = False
-    for path in pages:
-        audit, seen_question = audit_page(path, project, config, issues, seen_question)
-        audits.append(audit)
-    audit_sequence(audits, KNOWLEDGE_STEPS, "knowledge", issues)
-    audit_sequence(audits, QUESTION_STEPS, "question", issues)
-    issues.sort(key=lambda item: (item.path, item.line, item.column, item.code))
+    for index, path in enumerate(pages):
+        seen_question = audit_source(path, project, config, issues, stack, seen_question)
+        if index < len(pages) - 1:
+            audit_file_boundary(path, project, stack, config, issues)
+    audit_unclosed_environments(stack, issues)
+    source_order = {
+        path.relative_to(project).as_posix(): index for index, path in enumerate(pages)
+    }
+    issues.sort(
+        key=lambda item: (
+            source_order.get(item.path, len(source_order)),
+            item.line,
+            item.column,
+            item.code,
+        )
+    )
     return pages, issues
 
 
