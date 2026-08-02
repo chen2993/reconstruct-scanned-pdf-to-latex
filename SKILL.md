@@ -24,6 +24,8 @@ description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译�
 - `.cls` 从空白文件按实际原件实现；`asserts/base.cls` 只是接口参考，不是父类或视觉模板。
 - 自定义 LaTeX 环境、命令、计数器、标签键和配置 API 的命名必须使用英文 ASCII 标识符，只允许字母、数字和必要的下划线，不得使用中文或连字符。标准 LaTeX 的带星号布局环境（如 `figure*`、`equation*`、`align*`）可以照常使用，但不得给自定义语义所有者加星号；实现内部的 `@` 宏不属于页面语义 API。中文只能出现在正文、题注、角色显示文本等值中；连字符只允许出现在文件名、页面标识、样式卡片 ID、路径和 Git 提交文本中。
 - 所有显示编号由 `.cls` 计数器产生，逐页源码不得硬编码例题号、习题号、定义号、公式号、图表号或步骤号。
+- 目录和 PDF 书签必须由 `.cls` 集中管理：`latex/front/toc.tex` 只调用一次项目提供的 `\bookmaketoc` 自动目录指令，不得手写目录条目、页码或逐页 `\addcontentsline`；结构命令负责自动写入目录。
+- 最终 PDF 书签至少必须有封面、前言、献词和书末页四个顶层节点，并指向对应模块的实际第一页；前后置模块使用项目提供的书签指令（参考 `\bookbookmarkmodule{显示标题}{ascii_key}`，参考接口会先开始新页），不得手写物理页码或复制页面。若原件确实缺少其中一项，必须暂停请人工决定，不能伪造空内容或静默省略。
 - 每个可见块有且只有一个直接语义所有者。所有者可以按原件语义受控嵌套，例如题目包含答案、答案包含步骤；父级隐藏时子级不得单独出现。普通正文、列表、引文、脚注、公式、表格和媒体也必须落在已登记所有者内。
 - 跨页语义对象只使用一组 `\begin{environment}` 与 `\end{environment}`，可以跨越同一 `\bookinput` 连续加载的 `pages-xxx.tex` 文件；禁止将同一对象拆成多个公开片段接口。源文件边界不是 TeX 分组，也不应自动插入分页。编号、标签、锚点和标题只在 `\begin` 初始化；终止行为（包括做题本唯一答题区）只在 `\end` 执行。可跨页所有者必须登记在 `cross_page_owner_environments`，并以流式、非捕获正文的 LaTeX 环境实现；不得用 `\NewEnviron` 或未经 `\bookinput` 跨页编译验证的正文捕获组件实现。
 - 需要保留的图必须有可编译矢量源码。照片、连续色调或无法诚实矢量化的内容先暂停并询问用户，不得塞入截图或位图。
@@ -99,7 +101,7 @@ python <skill>/scripts/correct_pages.py <project>
 - 前置和后置按语义类型写入 `latex/front/`、`latex/back/`，例如 `cover.tex`、`dedication.tex`、`toc.tex`、`preface.tex`、`afterword.tex`、`references.tex`；严禁使用 `front-xxx.tex`、`back-xxx.tex` 或其他页码式文件名，一个类型模块可以自然扩展到多页。
 - 正文逐页写入 `latex/pages/pages-001.tex`、`pages-002.tex` 等。
 - `main.tex` 是唯一编排入口：在 `\documentclass` 前用 `\providecommand{\BookBuildOptions}{...}` 接收构建 driver 的目标选项，并通过 `\PassOptionsToClass` 交给项目 `.cls`；正文和所有前后置目标共用这一入口。
-- `main.tex` 对前置和后置使用多条原生 `\input{front/cover}`、`\input{front/toc}`、`\input{back/afterword}`，保留人工可调整的顺序；入口中的模块清单保持静态并可被审计，不在条件分支中选择另一套文件。需要按 workbook 改变目录或序言时，在同一模块内使用类文件提供的公共条件命令，不复制第二个入口。
+- `main.tex` 对前置和后置使用多条原生 `\input{front/cover}`、`\input{front/toc}`、`\input{back/afterword}`，保留人工可调整的顺序；入口中的模块清单保持静态并可被审计，不在条件分支中选择另一套文件。需要按 workbook 改变目录或序言时，在同一模块内使用类文件提供的公共条件命令，不复制第二个入口。目录模块只能通过自动目录指令生成内容，不能手工重写页码。
 - 项目 `.cls` 必须提供 `\bookinput{起始编号}{结束编号}`，`main.tex` 必须以一条 `\bookinput{1}{N}` 连续导入全部正文 `pages/pages-xxx.tex`；不得在 `main.tex` 中逐条 `\input` 正文，也不得为前置和后置增加批量加载器。`\bookinput` 必须按三位编号、按序加载，缺页或范围非法时明确报错，不得静默跳过。
 
 正文逐页文件只记录自己的最终页面标识，例如 `% Source page: pages-023`。一个前置或后置语义模块可以自然扩展为多页，允许用 `% Source pages:` 列出其覆盖的多个最终标识；仍不记录物理页、拆分批次或中间路径。
@@ -138,6 +140,8 @@ python <skill>/scripts/correct_pages.py <project>
 
 按 [references/workbook-matrix.md](references/workbook-matrix.md) 和 [asserts/build.ps1](asserts/build.ps1) 实现根目录 `build.ps1`。每个目标生成独立 driver，只定义 `\BookBuildOptions` 并输入同一个 `latex/main.tex`，不得再创建 `main-workbook.tex`。完整书只构建用户确认的原书尺寸；仅当原件和用户选择都包含相应题型时，才构建例题、习题或全做题本，不为没有题目的教材生成空目标。题目目标可分别构建 `original`、`a4`、`pad11`、`pad13`，并支持 `print` 与护眼黄 `eyecare`。若项目 `.cls` 实现了语义小节强制分页，再把 `section-break=false/true` 作为仅做题本的可选轴；普通全书不得注入该参数。完整书中的跨页对象自然流动；做题本仅在题目、必要媒体和答题区可安全收集且能同页容纳时将其作为一个分页单元，否则明确报错、按项目约定回退或请求人工复核，不能静默缩小内容。Pad11/Pad13 一页一题。封面、献词、目录和末页在各目标复用同一内容模块，横向纸型只做响应式重排。每个目标独立缓存，至少两遍并在引用/目录收敛后再通过；编译退出码之外还要审计所有 PDF 页的存在、页数/MediaBox、空文字页、位图对象、答案泄漏、书签/链接和日志收敛，并分类处理盒警告。所有目标通过后才原子发布到 `dist/`。
 参考构建脚本的 `matrix` 目标固定检查完整书的 `print`/`eyecare`，做题本范围必须通过 `-Scope` 显式传入实际存在的 `examples`、`exercises` 或 `all`；省略时不生成做题本。单目标 `workbook` 只接受一个范围，不能靠脚本猜测原件是否有题目。
+构建验收还必须检查 PDF outline：至少存在封面、前言、献词和书末页四个顶层书签，目录通过 `\bookmaketoc` 自动生成；目录页码和书签目标只能由 LaTeX 在收敛构建中计算，不能硬编码。
+参考构建脚本先调用 `scripts/audit_toc.py`，强制 `toc.tex` 恰好一次 `\bookmaketoc`、禁止手写目录命令且要求入口恰好导入一次目录模块；再调用 `scripts/audit_pdf_outline.py` 检查 outline 层级、四个固定目标页的非空渲染和辅助文件。这些脚本只读取源码、书签层级、目标页、页面渲染和辅助文件，不读取 PDF 正文文字。双语或定制显示文本只能通过 `-RequiredBookmarks cover=... preface=... dedication=... backmatter=...` 配置，四个固定语义键不可删除、替换或减少。
 
 ### 13. 补充
 
@@ -154,3 +158,5 @@ python <skill>/scripts/correct_pages.py <project>
 - [references/workbook-matrix.md](references/workbook-matrix.md)：原书、做题本纸张/主题/范围矩阵及版面约束。
 - [references/review-checklist.md](references/review-checklist.md)：结构、编译、视觉和人工复核门槛。
 - [references/git-workflow.md](references/git-workflow.md)：检查点、并行协作和提交消息格式。
+- `scripts/audit_toc.py`：目录模块与自动目录指令的静态审计。
+- `scripts/audit_pdf_outline.py`：固定四类 PDF 顶层书签与 outline 结构审计。

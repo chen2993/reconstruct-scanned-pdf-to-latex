@@ -37,6 +37,7 @@
 \RequirePackage{etoolbox}
 \RequirePackage{geometry}
 \RequirePackage{xcolor}
+\RequirePackage{hyperref}
 
 % --------------------------------------------------------------------------
 % Front and back modules are explicit in main.tex. Body pages use \bookinput,
@@ -345,6 +346,24 @@
 
 \newcommand{\bookstylelabel}[1]{\textbf{#1}}
 \newcommand{\bookstylestructure}[2]{#1{#2}}
+
+% Front/back modules use these centralized hooks.  The module key is a strict
+% ASCII label (for example ``cover`` or ``backmatter``); the visible title may
+% be localized.  Start each module on a fresh page so the outline target is
+% its actual first page, then add a local anchor for hyperref.  Keys are
+% registered so two modules cannot silently share one destination.
+\newcommand{\bookbookmarkmodule}[2]{%
+  \@ifundefined{book@bookmark@#2}{%
+    \expandafter\def\csname book@bookmark@#2\endcsname{}%
+  }{%
+    \PackageError{base}{Duplicate bookmark key `#2'}%
+      {Use one unique ASCII key for each front/back module.}%
+  }%
+  \clearpage
+  \phantomsection
+  \pdfbookmark[-1]{#1}{#2}%
+}
+\newcommand{\bookmaketoc}{\tableofcontents}
 
 % Streaming style hooks.  A project class redefines these begin/end pairs
 % instead of collecting an environment body.  This keeps a semantic owner

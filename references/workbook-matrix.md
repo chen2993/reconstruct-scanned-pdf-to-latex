@@ -20,6 +20,7 @@
 ```
 
 省略 `-Scope` 时只生成两个完整书目标，不会猜测或生成例题/习题做题本。单目标 `-Target workbook` 必须只传一个 `-Scope`。
+参考脚本默认以 `-RequiredBookmarks cover=封面,preface=前言,dedication=献词,backmatter=书末页` 检查四个顶层书签及其非空目标页；双语或定制显示文本只能保留四个固定语义键并调整等号右侧标题，不能删减或替换类别。该检查读取 PDF outline 和目标页渲染，需要 Python/PyMuPDF，不读取正文文字。
 
 ## 版式契约
 
@@ -43,6 +44,8 @@
 | `original` | 项目确认的原书尺寸 | 由原书决定 |
 
 构建后检查 PDF MediaBox，而不是只检查类文件参数；原书尺寸若未确认，暂停构建并询问用户。
+
+所有目标都必须复用同一套自动目录和 PDF outline 接口：`scripts/audit_toc.py` 强制目录模块只调用一次 `\bookmaketoc`、入口只导入一次 `front/toc`，结构命令自动产生目录条目和结构书签；每个目标的 PDF outline 至少保留封面、前言、献词和书末页四个顶层书签。不得为不同目标手工复制目录或硬编码书签页码。
 
 ## 入口参数
 

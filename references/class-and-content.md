@@ -56,6 +56,7 @@
 
 \begin{document}
 \input{front/cover}
+\input{front/preface}
 \input{front/dedication}
 \input{front/toc}
 \bookinput{1}{584}
@@ -63,8 +64,28 @@
 \end{document}
 ```
 
+四个必需模块在各自模块文件的实际第一页登记固定语义键（显示标题可以按项目语言调整）：
+
+```tex
+% front/cover.tex
+\bookbookmarkmodule{封面}{cover}
+% front/preface.tex
+\bookbookmarkmodule{前言}{preface}
+% front/dedication.tex
+\bookbookmarkmodule{献词}{dedication}
+% back/afterword.tex
+\bookbookmarkmodule{书末页}{backmatter}
+```
+
 项目 `.cls` 必须实现 `\bookinput` 接口，按三位编号依次加载 `pages/pages-001.tex` 至 `pages/pages-584.tex`；不得以不同命令替代，也不得让 `main.tex` 展开为正文逐条 `\input`。接口必须在缺页、范围倒置或编号非法时明确报错，不能静默跳过。前置和后置仍不得改成批量范围加载器。一个前置或后置模块可以在同一文件中自然生成多页。
 若 workbook 需要改变序言或目录的显示，入口中的模块清单仍保持静态并可被审计；在同一个模块内部使用英文命名的公共条件命令（参考 `\bookifworkbook`）控制内容，不得在 `main.tex` 条件分支中选择另一套文件，也不得创建 `main-workbook.tex`。
+
+### 目录与 PDF 书签
+
+- `latex/front/toc.tex` 必须只调用一次项目类文件提供的自动目录指令（固定参考接口为 `\bookmaketoc`）；目录条目、页码和缩进由 `.cls` 及 LaTeX 辅助文件生成；禁止在 `toc.tex` 或逐页源码中手写目录条目、页码或逐页 `\addcontentsline`。构建前运行 `scripts/audit_toc.py`。
+- `bookpart`、`bookchapter`、`booksection` 等结构命令必须由 `.cls` 自动写入目录并建立对应 PDF 书签；页面源码只提供标题语义，不手工写书签层级或页码。
+- 前后置模块在其实际第一页调用 `\bookbookmarkmodule{显示标题}{ascii_key}`（或项目等价接口）。参考接口先结束当前页、建立锚点再写入书签，因此每个模块的目标是其实际第一页；项目类若改写接口也必须保持这一契约。最终 PDF outline 至少包含封面、前言、献词和书末页四个顶层节点，键名只用英文 ASCII 标识符，目标位置由当前排版自动确定。
+- 每次构建至少运行两遍并检查 `.toc`、PDF outline 和内部链接收敛；书签缺失、重复、层级错误、顺序错误或指向空白页均阻止发布。原件没有对应模块时暂停并请求人工决定，不伪造内容或静默省略。
 
 正文逐页文件只保留一个最终页面标识注释，例如：
 

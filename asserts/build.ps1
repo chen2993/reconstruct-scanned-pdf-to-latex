@@ -11,6 +11,7 @@ param(
     [string]$Profile = 'original',
     [ValidateSet('print', 'eyecare')]
     [string]$Theme = 'print',
+    [string[]]$RequiredBookmarks = @('cover=封面', 'preface=前言', 'dedication=献词', 'backmatter=书末页'),
     [ValidateRange(2, 3)]
     [int]$Passes = 3,
     [switch]$Force,
@@ -35,6 +36,7 @@ function Assert-Command([string]$Name) {
 
 Assert-Command 'latexmk'
 Assert-Command 'xelatex'
+Assert-Command 'python'
 if (-not $SkipVisualCheck) { Assert-Command 'pdftoppm' }
 
 if ($Target -eq 'book' -and $Profile -ne 'original') {
@@ -45,6 +47,29 @@ if ($Target -eq 'book' -and $Scope.Count -gt 0) {
 }
 if ($Target -eq 'matrix' -and ($Profile -ne 'original' -or $Theme -ne 'print')) {
     throw 'matrix 会固定生成完整书的 print/eyecare 和全部做题本 profile；请改用单目标 workbook 调整轴。'
+}
+$bookmarkEntries = @($RequiredBookmarks | ForEach-Object {
+    $_ -split ',' | ForEach-Object { $_.Trim() }
+} | Where-Object { $_ })
+if ($bookmarkEntries.Count -ne 4) {
+    throw 'RequiredBookmarks 必须完整提供 cover=、preface=、dedication=、backmatter= 四个语义键。'
+}
+$requiredKeys = @('cover', 'preface', 'dedication', 'backmatter')
+$providedKeys = @()
+$providedTitles = @()
+foreach ($entry in $bookmarkEntries) {
+    $parts = $entry -split '=', 2
+    if ($parts.Count -ne 2 -or [string]::IsNullOrWhiteSpace($parts[0]) -or
+        [string]::IsNullOrWhiteSpace($parts[1])) {
+        throw "RequiredBookmarks 映射无效: $entry"
+    }
+    $providedKeys += $parts[0].Trim()
+    $providedTitles += $parts[1].Trim()
+}
+if (@($providedKeys | Select-Object -Unique).Count -ne 4 -or
+    (@($providedKeys | Where-Object { $_ -notin $requiredKeys })).Count -gt 0 -or
+    (@($providedTitles | Select-Object -Unique).Count -ne 4)) {
+    throw 'RequiredBookmarks 必须恰好包含四个不重复的固定语义键和显示标题。'
 }
 
 function New-Job([string]$Kind, [string]$JobName, [string]$ScopeName,
@@ -117,8 +142,16 @@ function Assert-Pdf([string]$Pdf, [string]$Log, [string]$JobName) {
         throw "PDF 过小，疑似空产物: $Pdf"
     }
     $logText = Get-Content -Raw -LiteralPath $Log
-    if ($logText -match 'Fatal error|Emergency stop|Undefined control sequence|LaTeX Error|undefined references|There were undefined references') {
+    if ($logText -match 'Fatal error|Emergency stop|Undefined control sequence|LaTeX Error|undefined references|There were undefined references|Rerun to get|Label(s) may have changed|multiply defined|destination with the same identifier') {
         throw "构建日志存在致命错误或未收敛引用: $JobName"
+    }
+    $outlineScript = Join-Path $ProjectRoot 'scripts\audit_pdf_outline.py'
+    if (-not (Test-Path -LiteralPath $outlineScript -PathType Leaf)) {
+        throw "缺少 PDF outline 审计脚本: $outlineScript"
+    }
+    & python '-X' 'utf8' $outlineScript $Pdf '--required-map' @bookmarkEntries
+    if ($LASTEXITCODE -ne 0) {
+        throw "PDF outline 未通过必需书签检查: $JobName"
     }
     if (-not $SkipVisualCheck) {
         $probe = Join-Path (Split-Path -Parent $Pdf) 'visual-probe'
@@ -149,13 +182,46 @@ function Invoke-Job([object]$Job) {
     }
     New-Item -ItemType Directory -Force -Path $cache | Out-Null
     New-Driver $Job $driver
+    $tocScript = Join-Path $ProjectRoot 'scripts\audit_toc.py'
+    if (-not (Test-Path -LiteralPath $tocScript -PathType Leaf)) {
+        throw "缺少自动目录审计脚本: $tocScript"
+    }
+    & python '-X' 'utf8' $tocScript $ProjectRoot
+    if ($LASTEXITCODE -ne 0) {
+        throw "自动目录审计失败: $($Job.JobName)"
+    }
+    $tocHashes = @()
+    $outlineHashes = @()
     Push-Location $LatexRoot
     try {
         for ($script:PassIndex = 1; $script:PassIndex -le $Passes; $script:PassIndex++) {
             Invoke-LatexPass $arguments $Job.JobName
+            foreach ($artifact in @(
+                @{ Path = (Join-Path $cache "$($Job.JobName).toc"); Name = 'toc' },
+                @{ Path = (Join-Path $cache "$($Job.JobName).out"); Name = 'outline' }
+            )) {
+                if (-not (Test-Path -LiteralPath $artifact.Path -PathType Leaf)) {
+                    if ($artifact.Name -eq 'toc') { $tocHashes += '<missing>' }
+                    else { $outlineHashes += '<missing>' }
+                    continue
+                }
+                $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifact.Path).Hash
+                if ($artifact.Name -eq 'toc') { $tocHashes += $hash }
+                else { $outlineHashes += $hash }
+            }
         }
     }
     finally { Pop-Location }
+    if ($tocHashes.Count -lt 2 -or $outlineHashes.Count -lt 2 -or
+        $tocHashes[-1] -eq '<missing>' -or $outlineHashes[-1] -eq '<missing>') {
+        throw "缺少 .toc 或 PDF outline 辅助文件: $($Job.JobName)"
+    }
+    if ($tocHashes[-1] -ne $tocHashes[-2]) {
+        throw "目录辅助文件在最后两遍之间仍未收敛: $($Job.JobName)"
+    }
+    if ($outlineHashes[-1] -ne $outlineHashes[-2]) {
+        throw "PDF outline 辅助文件在最后两遍之间仍未收敛: $($Job.JobName)"
+    }
     $pdf = Join-Path $cache "$($Job.JobName).pdf"
     $log = Join-Path $cache "$($Job.JobName).log"
     Assert-Pdf $pdf $log $Job.JobName

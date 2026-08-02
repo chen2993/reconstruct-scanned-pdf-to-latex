@@ -23,6 +23,11 @@ ROOT_OWNER = "$root"
 # remain strict identifiers.
 IDENTIFIER_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 ENVIRONMENT_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\*)?")
+MODULE_FILENAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
+PAGE_LIKE_MODULE = re.compile(
+    r"^(?:front|back|page|pages)(?:[-_]?\d+)?$|^(?:front|back)[-_].*$",
+    re.IGNORECASE,
+)
 
 DEFAULT_OWNER_ENVIRONMENTS = frozenset(
     {
@@ -684,6 +689,17 @@ def collect_pages(project: Path) -> list[Path]:
     seen: set[Path] = set()
     body_ranges: list[tuple[int, int]] = []
 
+    def validate_module_filename(section: str, candidate: Path) -> None:
+        stem = candidate.stem
+        if MODULE_FILENAME.fullmatch(stem) is None or PAGE_LIKE_MODULE.fullmatch(stem):
+            raise ConfigurationError(
+                f"{section} 模块必须使用英文语义类型名，禁止页码式名称: {candidate.name}"
+            )
+        if re.search(r"[-_]\d+$", stem):
+            raise ConfigurationError(
+                f"{section} 模块名不能以页码式数字结尾: {candidate.name}"
+            )
+
     def add_module(token: str) -> None:
         normalized = token.strip().replace("\\", "/")
         parts = Path(normalized).parts
@@ -696,6 +712,7 @@ def collect_pages(project: Path) -> list[Path]:
         candidate = latex / parts[0] / filename
         if candidate.parent != latex / parts[0] or not candidate.is_file():
             raise ConfigurationError(f"main.tex 引用的模块不存在或不是直接子级文件: {token}")
+        validate_module_filename(parts[0], candidate)
         if candidate in seen:
             raise ConfigurationError(f"main.tex 重复加载模块: {token}")
         seen.add(candidate)
@@ -743,6 +760,8 @@ def collect_pages(project: Path) -> list[Path]:
     for section in ("front", "back"):
         directory = latex / section
         actual = {path for path in directory.glob("*.tex") if path.is_file()}
+        for candidate in sorted(actual):
+            validate_module_filename(section, candidate)
         referenced = {path for path in seen if path.parent == directory}
         missing = sorted(actual - referenced)
         if missing:

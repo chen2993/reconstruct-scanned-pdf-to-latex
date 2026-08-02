@@ -261,6 +261,7 @@ def module_stub(name: str, identifiers: list[str]) -> str:
         "% Generated logical module stub; replace with reconstructed content.",
         f"% Module: {name}",
         "% Source pages:",
+        f"% The first content page must call \\bookbookmarkmodule{{VISIBLE TITLE}}{{{name}}}.",
     ]
     lines.extend(f"%   {identifier}" for identifier in identifiers)
     return "\n".join(lines) + "\n"
