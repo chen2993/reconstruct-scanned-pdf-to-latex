@@ -37,6 +37,14 @@ def parse_args() -> argparse.Namespace:
         description="将暂存页按 front/pages/back 命名，并生成 LaTeX 入口骨架。"
     )
     parser.add_argument("project", type=Path, help="已完成页面方向检查的项目目录")
+    parser.add_argument(
+        "--discard",
+        metavar="START-END[,START-END...]",
+        help=(
+            "舍去临时页序号；支持逗号分隔的单页或范围，例如 2,5-6。"
+            "这些页不参与 front/body/back 编号。"
+        ),
+    )
     parser.add_argument("--front", metavar="START-END", help="前置页暂存范围；可省略")
     parser.add_argument(
         "--front-names",
@@ -98,6 +106,27 @@ def parse_range(value: str | None, label: str) -> list[int]:
     if start < 1 or end < start:
         raise RuntimeError(f"{label} 范围无效: {value}")
     return list(range(start, end + 1))
+
+
+def parse_discard(value: str | None, page_count: int) -> set[int]:
+    if value is None or value.strip().lower() in {"", "none"}:
+        return set()
+    discarded: set[int] = set()
+    for item in value.split(","):
+        item = item.strip()
+        if not item:
+            raise RuntimeError("discard 不能包含空范围。")
+        match = re.fullmatch(r"(\d+)(?:-(\d+))?", item)
+        if match is None:
+            raise RuntimeError(
+                f"discard 范围无效: {item!r}；应写成 START-END[,START-END...]。"
+            )
+        start = int(match.group(1))
+        end = int(match.group(2) or match.group(1))
+        if start < 1 or end < start or end > page_count:
+            raise RuntimeError(f"discard 范围超出暂存页: {item!r}")
+        discarded.update(range(start, end + 1))
+    return discarded
 
 
 def validate_module_name(name: str, option: str) -> None:
@@ -365,14 +394,23 @@ def main() -> int:
                 f"--class-name 不是合法 LaTeX 标识符: {args.class_name!r}"
             )
         paths = load_pages(pages_dir)
+        discarded = parse_discard(args.discard, len(paths))
+        kept_indexes = [
+            index for index in range(1, len(paths) + 1) if index not in discarded
+        ]
         front_range = parse_range(args.front, "front")
         body_range = parse_range(args.body, "body")
         back_range = parse_range(args.back, "back")
+        front_range = [index for index in front_range if index not in discarded]
+        body_range = [index for index in body_range if index not in discarded]
+        back_range = [index for index in back_range if index not in discarded]
         if not body_range:
             raise RuntimeError("body 范围不得为空。")
         order = front_range + body_range + back_range
-        if order != list(range(1, len(paths) + 1)):
-            raise RuntimeError("front、body、back 必须完整覆盖暂存页并保持顺序。")
+        if order != kept_indexes:
+            raise RuntimeError(
+                "front、body、back 必须完整覆盖未舍去的暂存页并保持顺序。"
+            )
         front_modules = resolve_modules("front", len(front_range), args.front_modules, args.front_names)
         back_modules = resolve_modules("back", len(back_range), args.back_modules, args.back_names)
 
@@ -477,7 +515,10 @@ def main() -> int:
         print(f"最终页面命名失败，未完成清理: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
 
-    print(f"已生成最终页面 {len(image_names)} 张，正文 {body_count} 页。")
+    print(
+        f"已生成最终页面 {len(image_names)} 张，正文 {body_count} 页；"
+        f"舍去暂存页 {len(discarded)} 张。"
+    )
     print("前置/后置使用逐条 input，正文使用 bookinput；暂存页已清理。")
     return 0
 
