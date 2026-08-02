@@ -346,7 +346,7 @@ def main() -> int:
     args = parse_args()
     project = args.project.resolve()
     control = project / CONTROL_DIR
-    pages_dir = control / "pdf_pages"
+    pages_dir = control / "extraced"
     latex = project / "latex"
     if not project.is_dir() or not control.is_dir():
         print(f"项目尚未初始化: {project}", file=sys.stderr)

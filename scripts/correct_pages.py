@@ -23,7 +23,7 @@ PAGE_NAME = re.compile(r"page-(\d{3,})\.png")
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "按 page-corrections.json 更新 pdf_pages 中的完整页面集。"
+            "按 page-corrections.json 更新 extraced 中的完整页面集。"
             "只接受 0/90/180/270 度旋转；忽略小倾斜。"
         )
     )
@@ -100,33 +100,33 @@ def replace_directory(stage: Path, target: Path) -> None:
         shutil.rmtree(backup, ignore_errors=True)
 
 
-def load_pdf_pages(directory: Path) -> tuple[Path, dict[str, Any], list[dict[str, Any]]]:
+def load_extraced_pages(directory: Path) -> tuple[Path, dict[str, Any], list[dict[str, Any]]]:
     manifest_path = directory / "manifest.json"
-    manifest = read_json(manifest_path, "pdf_pages 清单")
+    manifest = read_json(manifest_path, "extraced 清单")
     if manifest.get("kind") != "pdf-pages" or manifest.get("state") not in {
         "split",
         "corrected",
     }:
-        raise RuntimeError("pdf_pages 清单类型无效，请重新拆页。")
+        raise RuntimeError("extraced 清单类型无效，请重新拆页。")
     pages = manifest.get("pages")
     if not isinstance(pages, list) or not pages:
-        raise RuntimeError("pdf_pages 清单没有页面。")
+        raise RuntimeError("extraced 清单没有页面。")
     expected_names: list[str] = []
     for expected_number, record in enumerate(pages, 1):
         if not isinstance(record, dict):
-            raise RuntimeError("pdf_pages 清单中的页面记录无效。")
+            raise RuntimeError("extraced 清单中的页面记录无效。")
         filename = record.get("filename")
         if not isinstance(filename, str) or PAGE_NAME.fullmatch(filename) is None:
-            raise RuntimeError(f"pdf_pages 清单中的文件名无效: {filename!r}")
+            raise RuntimeError(f"extraced 清单中的文件名无效: {filename!r}")
         if record.get("page_index") != expected_number:
-            raise RuntimeError("pdf_pages 清单的页序不连续。")
+            raise RuntimeError("extraced 清单的页序不连续。")
         path = directory / filename
         if not path.is_file() or sha256(path) != record.get("sha256"):
-            raise RuntimeError(f"pdf_pages 页面缺失或已变化: {filename}")
+            raise RuntimeError(f"extraced 页面缺失或已变化: {filename}")
         expected_names.append(filename)
     actual_names = sorted(path.name for path in directory.glob("page-*.png"))
     if actual_names != sorted(expected_names):
-        raise RuntimeError("pdf_pages 目录与清单不一致，请重新拆页。")
+        raise RuntimeError("extraced 目录与清单不一致，请重新拆页。")
     return manifest_path, manifest, pages
 
 
@@ -208,7 +208,7 @@ def main() -> int:
     args = parse_args()
     project = args.project.resolve()
     control = project / CONTROL_DIR
-    pages_dir = control / "pdf_pages"
+    pages_dir = control / "extraced"
     output = pages_dir
     config_path = (
         args.config.resolve()
@@ -228,16 +228,16 @@ def main() -> int:
 
         config = read_json(config_path, "页面修正规则")
         config_file_hash = sha256(config_path)
-        input_manifest, source_manifest, source_pages = load_pdf_pages(pages_dir)
+        input_manifest, source_manifest, source_pages = load_extraced_pages(pages_dir)
         corrections = parse_corrections(config, len(source_pages))
         config_hash = correction_set_sha256(corrections)
         if source_manifest.get("state") == "corrected":
             if sha256(config_path) != config_file_hash:
                 raise RuntimeError("检查期间修正规则发生变化，请重新执行。")
             if source_manifest.get("corrections_sha256") == config_hash:
-                print("pdf_pages 已按当前修正规则生成，无需重复处理。")
+                print("extraced 已按当前修正规则生成，无需重复处理。")
                 return 0
-            raise RuntimeError("pdf_pages 已修正；如需修改规则，请先重新执行拆页。")
+            raise RuntimeError("extraced 已修正；如需修改规则，请先重新执行拆页。")
         input_manifest_hash = sha256(input_manifest)
         stage.mkdir()
         output_pages: list[dict[str, Any]] = []
@@ -301,12 +301,12 @@ def main() -> int:
         if stage.exists():
             shutil.rmtree(stage, ignore_errors=True)
         print(
-            f"页面修正失败，原 pdf_pages 目录保持不变: {type(exc).__name__}: {exc}",
+            f"页面修正失败，原 extraced 目录保持不变: {type(exc).__name__}: {exc}",
             file=sys.stderr,
         )
         return 1
 
-    print(f"已更新 {len(output_pages)} 个 pdf_pages；应用规则 {len(corrections)} 条。")
+    print(f"已更新 {len(output_pages)} 个 extraced；应用规则 {len(corrections)} 条。")
     return 0
 
 

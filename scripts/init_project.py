@@ -24,7 +24,7 @@ DIRECTORIES = (
     "scripts",
     "dist",
     "tmp",
-    f"{CONTROL_DIR}/pdf_pages",
+    f"{CONTROL_DIR}/extraced",
     f"{CONTROL_DIR}/reviews",
 )
 
@@ -51,7 +51,7 @@ README = """# 扫描教材 LaTeX 重建项目
 """
 
 GITIGNORE = """# 可从源 PDF 和配置重建的大体积页图
-/.reconstruct-scanned-pdf-to-latex/pdf_pages/
+/.reconstruct-scanned-pdf-to-latex/extraced/
 /.reconstruct-scanned-pdf-to-latex/*.png
 
 # 构建缓存与成品

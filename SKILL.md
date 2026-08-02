@@ -49,7 +49,7 @@ project/
   asserts/base.cls  asserts/build.ps1  scripts/  tmp/  dist/
 ```
 
-控制目录只保存进度、修正规则、样式卡片和复核结论。阶段 2 至 4 使用的 `pdf_pages/` 是临时工作区，阶段 4 成功后必须清理；最终只保留同名的 `front-xxx.png`、`pages-xxx.png`、`back-xxx.png`（若用户需要视觉证据）。页面 PNG 只作为方向、样式、内容和结果比对的逐页视觉证据，不得拼接；最终交付前可以按用户决定清理。`asserts/` 中的 `base.cls` 与 `build.ps1` 是参考模板；实际项目的 `.cls` 和构建脚本写入 `latex/` 与根目录。
+控制目录只保存进度、修正规则、样式卡片和复核结论。阶段 2 至 4 使用的 `extraced/` 是临时工作区，阶段 4 成功后必须清理；最终只保留同名的 `front-xxx.png`、`pages-xxx.png`、`back-xxx.png`（若用户需要视觉证据）。页面 PNG 只作为方向、样式、内容和结果比对的逐页视觉证据，不得拼接；最终交付前可以按用户决定清理。`asserts/` 中的 `base.cls` 与 `build.ps1` 是参考模板；实际项目的 `.cls` 和构建脚本写入 `latex/` 与根目录。
 
 ## 工作流
 

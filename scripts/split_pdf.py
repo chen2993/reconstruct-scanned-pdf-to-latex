@@ -22,7 +22,7 @@ CONTROL_DIR = ".reconstruct-scanned-pdf-to-latex"
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "将 PDF 拆为 pdf_pages/page-xxx.png；不读取文字层、不执行 OCR。"
+            "将 PDF 拆为 extraced/page-xxx.png；不读取文字层、不执行 OCR。"
             "默认优先保留整页扫描图的原始像素网格。"
         )
     )
@@ -284,7 +284,7 @@ def main() -> int:
     project = args.project.resolve()
     pdf = args.pdf.resolve()
     control = project / CONTROL_DIR
-    output = control / "pdf_pages"
+    output = control / "extraced"
 
     if not project.is_dir() or not control.is_dir():
         print(f"项目尚未初始化: {project}", file=sys.stderr)
@@ -300,7 +300,7 @@ def main() -> int:
     except ValueError:
         pass
     else:
-        print("源 PDF 不得放在 pdf_pages 输出目录内。", file=sys.stderr)
+        print("源 PDF 不得放在 extraced 输出目录内。", file=sys.stderr)
         return 2
 
     stage = output.parent / f".{output.name}.stage-{uuid.uuid4().hex}"
@@ -398,7 +398,7 @@ def main() -> int:
         if stage.exists():
             shutil.rmtree(stage, ignore_errors=True)
         print(
-            f"拆页失败，原 pdf_pages 目录保持不变: {type(exc).__name__}: {exc}",
+            f"拆页失败，原 extraced 目录保持不变: {type(exc).__name__}: {exc}",
             file=sys.stderr,
         )
         return 1
