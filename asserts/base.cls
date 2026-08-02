@@ -35,17 +35,31 @@
 \RequirePackage{xcolor}
 
 % --------------------------------------------------------------------------
-% Front and back modules are explicit in main.tex. Body pages may use \bookinput
-% so a class can load pages/pages-001.tex through pages/pages-999.tex in order.
+% Front and back modules are explicit in main.tex. Body pages use \bookinput,
+% which loads pages/pages-001.tex through pages/pages-999.tex in order.
 % File names may contain hyphens; command and environment names below do not.
 % --------------------------------------------------------------------------
 
 \newcount\book@inputpage
 \newcount\book@inputlastpage
+\newif\ifbook@inputvalid
 \newcommand{\bookinput}[2]{%
+  \book@inputvalidtrue
   \book@inputpage=#1\relax
   \book@inputlastpage=#2\relax
-  \book@inputnext
+  \ifnum\book@inputpage<1
+    \book@inputvalidfalse
+    \PackageError{base}{The first body page must be at least 1}%
+      {Use \string\bookinput\string{1\string}\string{N\string} with N at least 1.}%
+  \fi
+  \ifnum\book@inputlastpage<\book@inputpage
+    \book@inputvalidfalse
+    \PackageError{base}{The last body page precedes the first body page}%
+      {Use \string\bookinput\string{START\string}\string{END\string} with START no greater than END.}%
+  \fi
+  \ifbook@inputvalid
+    \book@inputnext
+  \fi
 }
 \newcommand{\book@inputnext}{%
   \ifnum\book@inputpage<10
@@ -57,11 +71,12 @@
   \fi\fi
   \input{\book@inputfilename}%
   \ifnum\book@inputpage<\book@inputlastpage
-    \advance\book@inputpage by 1\relax
-    \expandafter\book@inputnext
+    % Page environments may leave a local TeX group open across inputs.
+    % Keep the range cursor global so closing that owner cannot rewind it.
+    \global\advance\book@inputpage by 1\relax
+    \book@inputnext
   \fi
 }
-\let\bookinputpages\bookinput
 
 % --------------------------------------------------------------------------
 % Semantic visibility. Every visible block has one direct owner and may inherit
@@ -314,7 +329,7 @@
 
 % Streaming style hooks.  A project class redefines these begin/end pairs
 % instead of collecting an environment body.  This keeps a semantic owner
-% open across sequential \input files.
+% open across page files reached by one \bookinput call.
 \newcommand{\bookstylebodybegin}{}
 \newcommand{\bookstylebodyend}{}
 \newcommand{\bookstylematterbegin}[2]{%
@@ -368,7 +383,7 @@
 % --------------------------------------------------------------------------
 % Streaming semantic-owner support.  Do not replace these with body-capturing
 % definitions: a single \begin may be in pages/pages-001.tex and its matching
-% \end in a later sequential \input file.  When a selected owner is hidden,
+% \end in a later page file reached by the same \bookinput call.  When a selected owner is hidden,
 % its content is still expanded in a discarded box so nested counters, labels,
 % and semantic structure remain valid without leaking visible material.
 % --------------------------------------------------------------------------

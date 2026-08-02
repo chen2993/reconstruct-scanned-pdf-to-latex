@@ -24,7 +24,7 @@ description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译�
 - LaTeX 环境、命令、计数器、标签键和内部 API 的命名必须使用英文 ASCII 标识符，只允许字母、数字和必要的下划线，不得使用中文或连字符。中文只能出现在正文、题注、角色显示文本等值中；连字符只允许出现在文件名、页面标识、样式卡片 ID、路径和 Git 提交文本中。
 - 所有显示编号由 `.cls` 计数器产生，逐页源码不得硬编码例题号、习题号、定义号、公式号、图表号或步骤号。
 - 每个可见块有且只有一个直接语义所有者。所有者可以按原件语义受控嵌套，例如题目包含答案、答案包含步骤；父级隐藏时子级不得单独出现。普通正文、列表、引文、脚注、公式、表格和媒体也必须落在已登记所有者内。
-- 跨页语义对象只使用一组 `\begin{environment}` 与 `\end{environment}`，可以跨越连续 `\input` 的 `pages-xxx.tex` 文件；禁止将同一对象拆成多个公开片段接口。源文件边界不是 TeX 分组，也不应自动插入分页。编号、标签、锚点和标题只在 `\begin` 初始化；终止行为（包括做题本唯一答题区）只在 `\end` 执行。可跨页所有者必须登记在 `cross_page_owner_environments`，并以流式、非捕获正文的 LaTeX 环境实现；不得用 `\NewEnviron` 或未经跨 `\input` 编译验证的正文捕获组件实现。
+- 跨页语义对象只使用一组 `\begin{environment}` 与 `\end{environment}`，可以跨越同一 `\bookinput` 连续加载的 `pages-xxx.tex` 文件；禁止将同一对象拆成多个公开片段接口。源文件边界不是 TeX 分组，也不应自动插入分页。编号、标签、锚点和标题只在 `\begin` 初始化；终止行为（包括做题本唯一答题区）只在 `\end` 执行。可跨页所有者必须登记在 `cross_page_owner_environments`，并以流式、非捕获正文的 LaTeX 环境实现；不得用 `\NewEnviron` 或未经 `\bookinput` 跨页编译验证的正文捕获组件实现。
 - 需要保留的图必须有可编译矢量源码。照片、连续色调或无法诚实矢量化的内容先暂停并询问用户，不得塞入截图或位图。
 - 纸张尺寸、页面分区、语义归属、跨页关系或样式差异无法从证据可靠判断时，立即暂停当前批次并向用户提问；不要用猜测、近似样式或硬编码继续推进。
 - 判断原书纸张尺寸时，先逐页检查封面、版权页、出版/印刷信息页是否明确写有“开本”“成品尺寸”或其他纸张规格；只用原生多模态能力读取这些视觉信息，先记录规格原文和单位，阶段 4 后再补记来源页面的最终标识。
@@ -96,7 +96,7 @@ python <skill>/scripts/correct_pages.py <project>
 - 正文逐页写入 `latex/pages/pages-001.tex`、`pages-002.tex` 等。
 - `main.tex` 是唯一编排入口：在 `\documentclass` 前用 `\providecommand{\BookBuildOptions}{...}` 接收构建 driver 的目标选项，并通过 `\PassOptionsToClass` 交给项目 `.cls`；正文和所有前后置目标共用这一入口。
 - `main.tex` 对前置和后置使用多条原生 `\input{front/cover}`、`\input{front/toc}`、`\input{back/afterword}`，保留人工可调整的顺序；需要按 workbook 改变目录或序言时，使用类文件提供的公共条件命令，不复制第二个入口。
-- 正文可以使用项目 `.cls` 提供的 `\bookinput{起始编号}{结束编号}` 批量导入 `pages/pages-xxx.tex`。若项目类文件不提供该命令，再逐条 `\input`；不得为前置和后置增加批量加载器。
+- 项目 `.cls` 必须提供 `\bookinput{起始编号}{结束编号}`，`main.tex` 必须以一条 `\bookinput{1}{N}` 连续导入全部正文 `pages/pages-xxx.tex`；不得在 `main.tex` 中逐条 `\input` 正文，也不得为前置和后置增加批量加载器。`\bookinput` 必须按三位编号、按序加载，缺页或范围非法时明确报错，不得静默跳过。
 
 每个源文件只记录自己的最终页面标识，例如 `% Source page: pages-023`；不记录物理页、拆分批次或中间路径。
 
@@ -108,7 +108,7 @@ python <skill>/scripts/correct_pages.py <project>
 
 ### 6. 样式实现
 
-阅读 [references/style-cards.md](references/style-cards.md)、[references/class-and-content.md](references/class-and-content.md) 和 [asserts/base.cls](asserts/base.cls)，在 `latex/` 从零实现项目 `.cls`，并同步填写 `docs/class-api.md` 与 `semantic-audit.json`。集中管理纸张、版心、字体、间距、页眉页脚、颜色、环境、计数器、内容视图、题目归属、跨页接口和媒体接口。每新增一个公共接口，先在 API 文档中锁定输入、输出、错误行为和命名契约，再实现并进行常规编译复核；环境、命令、计数器和标签键先通过英文 ASCII 标识检查。每个登记为可跨页的环境都要以连续 `\input` 夹具验证单一 `\begin`/`\end`，并在完整书与隐藏视图各编译一次。
+阅读 [references/style-cards.md](references/style-cards.md)、[references/class-and-content.md](references/class-and-content.md) 和 [asserts/base.cls](asserts/base.cls)，在 `latex/` 从零实现项目 `.cls`，并同步填写 `docs/class-api.md` 与 `semantic-audit.json`。集中管理纸张、版心、字体、间距、页眉页脚、颜色、环境、计数器、内容视图、题目归属、跨页接口和媒体接口。每新增一个公共接口，先在 API 文档中锁定输入、输出、错误行为和命名契约，再实现并进行常规编译复核；环境、命令、计数器和标签键先通过英文 ASCII 标识检查。每个登记为可跨页的环境都要以单条 `\bookinput` 连续加载两个或更多页面的夹具验证单一 `\begin`/`\end`，并在完整书与隐藏视图各编译一次。
 
 ### 7. 样式复核
 
