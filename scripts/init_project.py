@@ -38,7 +38,7 @@ README = """# 扫描教材 LaTeX 重建项目
 
 页面内容只通过运行环境的原生多模态能力读取，不使用 OCR 或 PDF 文字层提取。
 项目专用 `.cls` 与根目录构建脚本应在分析原书后另行实现；初始化器不提供模板。
-页面重编号脚本会生成正文逐页 `.tex`、前后置逻辑模块骨架和 `latex/main.tex` 导入入口；入口只用项目 `.cls` 的一条 `\\bookinput{1}{N}` 载入正文，但不会生成项目 `.cls`。
+页面重编号脚本会生成正文逐页 `.tex`、按语义类型命名的前后置逻辑模块骨架和 `latex/main.tex` 导入入口；入口只用项目 `.cls` 的一条 `\\bookinput{1}{N}` 载入正文，但不会生成项目 `.cls`。前后置模块禁止使用 `front-xxx.tex`、`back-xxx.tex` 或其他页码式名称。
 逐页源码和复核表使用 `front-xxx`、`pages-xxx`、`back-xxx` 页面标识及成品构建目标定位，不记录 PDF 物理页或逐页页码。
 初始化后先逐页检查书内版权/出版/印刷信息是否标明开本或成品尺寸，再记录页数、方向、`MediaBox` 范围、资源类型、扫描边框和页面分型；印刷规格只用原生多模态能力读取，其他输入审计只读元数据、对象树和渲染图像，不读取文字层。
 环境、命令、计数器、标签键和内部 API 必须使用英文 ASCII 标识符；中文只作为内容或显示文本的值。
@@ -154,7 +154,7 @@ CLASS_API = """# 项目类文件 API
 
 阶段 4 生成的唯一 `main.tex` 在 `\\documentclass` 前接收 driver 的 `\\BookBuildOptions`，再对前置页和后置页逐条写入原生 `\\input`，正文必须使用项目类文件的
 `\\bookinput{1}{N}` 以一条范围调用导入全部 `pages/pages-xxx.tex`。前置页和后置页使用
-`cover`、`dedication`、`toc`、`afterword` 等经人工确认的逻辑模块文件名；一个模块可以自然扩展多页。
+`cover`、`dedication`、`toc`、`preface`、`afterword`、`references` 等经人工确认的语义类型文件名；禁止 `front-xxx`、`back-xxx` 或其他页码式模块名，一个模块可以自然扩展多页。
 正文页使用 `pages/pages-xxx.tex`。在此记录正文范围、三位编号规则、导入顺序和缺页/非法范围的报错契约；
 项目 `.cls` 不负责扫描或猜测页面文件，但必须按 `\\bookinput` 的显式范围加载对应正文页。
 

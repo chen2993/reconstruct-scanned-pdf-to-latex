@@ -25,6 +25,7 @@ BODY_TEX_NAME = re.compile(r"pages-(\d{3,})\.tex")
 # Logical module names become LaTeX input names and must not introduce a
 # hyphenated identifier into the generated source.
 SEMANTIC_NAME = re.compile(r"[a-z][a-z0-9_]*")
+PAGE_LIKE_MODULE_NAME = re.compile(r"(?:front|back|page|pages)(?:_?\d+)?")
 LATEX_IDENTIFIER = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
 MAIN_BEGIN = "% BEGIN GENERATED PAGE IMPORTS"
 MAIN_END = "% END GENERATED PAGE IMPORTS"
@@ -40,24 +41,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--front-names",
         metavar="NAME[,NAME...]",
-        help="兼容格式：前置页一页一个逻辑模块名",
+        help="兼容格式：前置页一页一个语义类型名；禁止页码式名称",
     )
     parser.add_argument(
         "--front-modules",
         metavar="NAME=START-END,...",
-        help="前置逻辑模块范围，例如 cover=1,dedication=2-3,toc=4-8",
+        help="前置语义模块范围，例如 cover=1,dedication=2-3,toc=4-8；禁止页码式名称",
     )
     parser.add_argument("--body", required=True, metavar="START-END", help="正文暂存范围")
     parser.add_argument("--back", metavar="START-END", help="后置页暂存范围；可省略")
     parser.add_argument(
         "--back-names",
         metavar="NAME[,NAME...]",
-        help="兼容格式：后置页一页一个逻辑模块名",
+        help="兼容格式：后置页一页一个语义类型名；禁止页码式名称",
     )
     parser.add_argument(
         "--back-modules",
         metavar="NAME=START-END,...",
-        help="后置逻辑模块范围，例如 afterword=1-3,references=4-6",
+        help="后置语义模块范围，例如 afterword=1-3,references=4-6；禁止页码式名称",
     )
     parser.add_argument(
         "--class-name",
@@ -99,6 +100,15 @@ def parse_range(value: str | None, label: str) -> list[int]:
     return list(range(start, end + 1))
 
 
+def validate_module_name(name: str, option: str) -> None:
+    if SEMANTIC_NAME.fullmatch(name) is None:
+        raise RuntimeError(f"{option} 中的名称无效: {name!r}")
+    if PAGE_LIKE_MODULE_NAME.fullmatch(name) is not None:
+        raise RuntimeError(
+            f"{option} 必须使用语义类型名（例如 cover、toc、afterword），禁止页码式名称: {name!r}"
+        )
+
+
 def parse_names(value: str | None, count: int, option: str, section: str) -> list[str]:
     if count == 0:
         if value is not None and value.strip().lower() not in {"", "none"}:
@@ -110,8 +120,7 @@ def parse_names(value: str | None, count: int, option: str, section: str) -> lis
     if len(names) != count:
         raise RuntimeError(f"{option} 需要 {count} 个名称，实际得到 {len(names)} 个。")
     for name in names:
-        if SEMANTIC_NAME.fullmatch(name) is None:
-            raise RuntimeError(f"{option} 中的名称无效: {name!r}")
+        validate_module_name(name, option)
     if len(names) != len(set(names)):
         raise RuntimeError(f"{option} 不能包含重复名称。")
     return names
@@ -129,6 +138,7 @@ def parse_modules(value: str | None, count: int, option: str, section: str) -> l
         match = re.fullmatch(r"([a-z][a-z0-9_]*)=(\d+)(?:-(\d+))?", item.strip())
         if match is None:
             raise RuntimeError(f"{option} 项目无效: {item!r}；应为 NAME=START-END。")
+        validate_module_name(match.group(1), option)
         start = int(match.group(2))
         end = int(match.group(3) or match.group(2))
         if start < 1 or end < start or end > count:

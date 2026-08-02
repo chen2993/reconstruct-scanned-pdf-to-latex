@@ -16,7 +16,7 @@
 
 项目只维护一套内容事实和一套共享样式：
 
-- `latex/front/*.tex` 与 `latex/back/*.tex` 承载前后置逻辑模块；
+- `latex/front/*.tex` 与 `latex/back/*.tex` 承载按语义类型命名的前后置逻辑模块（如 `cover.tex`、`toc.tex`、`afterword.tex`）；禁止 `front-xxx.tex`、`back-xxx.tex` 或其他页码式文件名；
 - `latex/pages/pages-xxx.tex` 承载正文页；
 - 项目 `.cls` 拥有纸张、版心、字体、标题、页眉页脚、颜色、环境、计数器、内容筛选、做题本和图形接口；
 - `main.tex` 是唯一目标和编排入口；它接收 driver 提供的 `\BookBuildOptions`，在 `\documentclass` 前通过 `\PassOptionsToClass` 交给项目 `.cls`，不实现第二套样式；

@@ -20,6 +20,7 @@ description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译�
 - 不修改源 PDF，不导入整页扫描图，不把参考工程的书名、字体、颜色、尺寸、页数或局部版式直接复制到新项目。
 - 页面拆分和旋转产生的中间文件只放临时目录，成功命名后清理；不保留中间页面副本、页面映射表或物理页记录。
 - 最终页面标识只有 `front-xxx`、`pages-xxx`、`back-xxx` 三类。需要保留视觉证据时使用同名 PNG；源码页面使用 `front/`、`pages/`、`back/` 下的 `.tex` 文件。
+- `latex/front/` 和 `latex/back/` 下的 `.tex` 文件必须按语义类型命名，例如 `cover.tex`、`dedication.tex`、`toc.tex`、`preface.tex`、`afterword.tex`、`references.tex`；严禁 `front-001.tex`、`front_001.tex`、`back-001.tex`、`page-001.tex` 或任何页码式文件名。页码只属于最终 PNG 标识和 `latex/pages/pages-xxx.tex` 正文文件。
 - `.cls` 从空白文件按实际原件实现；`asserts/base.cls` 只是接口参考，不是父类或视觉模板。
 - LaTeX 环境、命令、计数器、标签键和内部 API 的命名必须使用英文 ASCII 标识符，只允许字母、数字和必要的下划线，不得使用中文或连字符。中文只能出现在正文、题注、角色显示文本等值中；连字符只允许出现在文件名、页面标识、样式卡片 ID、路径和 Git 提交文本中。
 - 所有显示编号由 `.cls` 计数器产生，逐页源码不得硬编码例题号、习题号、定义号、公式号、图表号或步骤号。
@@ -92,7 +93,7 @@ python <skill>/scripts/correct_pages.py <project>
 
 将修正后的页按原件顺序直接命名为 `front-001`、`pages-001`、`back-001`。不生成页面映射或物理页表。
 
-- 前置和后置按逻辑模块写入 `latex/front/`、`latex/back/`，例如 `cover.tex`、`dedication.tex`、`toc.tex`、`afterword.tex`；一个模块可以自然扩展到多页。
+- 前置和后置按语义类型写入 `latex/front/`、`latex/back/`，例如 `cover.tex`、`dedication.tex`、`toc.tex`、`preface.tex`、`afterword.tex`、`references.tex`；严禁使用 `front-xxx.tex`、`back-xxx.tex` 或其他页码式文件名，一个类型模块可以自然扩展到多页。
 - 正文逐页写入 `latex/pages/pages-001.tex`、`pages-002.tex` 等。
 - `main.tex` 是唯一编排入口：在 `\documentclass` 前用 `\providecommand{\BookBuildOptions}{...}` 接收构建 driver 的目标选项，并通过 `\PassOptionsToClass` 交给项目 `.cls`；正文和所有前后置目标共用这一入口。
 - `main.tex` 对前置和后置使用多条原生 `\input{front/cover}`、`\input{front/toc}`、`\input{back/afterword}`，保留人工可调整的顺序；需要按 workbook 改变目录或序言时，使用类文件提供的公共条件命令，不复制第二个入口。
