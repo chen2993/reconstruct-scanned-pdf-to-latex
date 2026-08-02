@@ -40,7 +40,7 @@ description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译�
 project/
   .gitattributes  .gitignore  README.MD  build.ps1
   .reconstruct-scanned-pdf-to-latex/
-    progress.md  page-corrections.json  semantic-audit.json  style-cards.md  reviews/
+    progress.md  page-corrections.json  semantic-audit.json  style-cards.md  reviews/  extraced/
     front-xxx.png  pages-xxx.png  back-xxx.png
   docs/class-api.md
   latex/<project_class>.cls  latex/main.tex

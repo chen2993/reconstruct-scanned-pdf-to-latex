@@ -34,6 +34,7 @@ README = """# 扫描教材 LaTeX 重建项目
 - `latex/`：从零实现的项目专用 `.cls`、前置页、正文、后置页和矢量图源码。
 - `asserts/`：参考类文件、构建脚本或其他不属于正文事实的辅助资源。
 - `.reconstruct-scanned-pdf-to-latex/`：最终页面标识、修正规则、样式卡片和复核材料。
+- `.reconstruct-scanned-pdf-to-latex/extraced/`：拆页和方向修正期间的临时逐页 PNG；重编号成功后清理。
 - `dist/`：最终成品；`tmp/`：可删除的临时文件。
 
 页面内容只通过运行环境的原生多模态能力读取，不使用 OCR 或 PDF 文字层提取。
