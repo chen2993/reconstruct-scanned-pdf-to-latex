@@ -45,7 +45,11 @@ def parse_args() -> argparse.Namespace:
             "这些页不参与 front/body/back 编号。"
         ),
     )
-    parser.add_argument("--front", metavar="START-END", help="前置页暂存范围；可省略")
+    parser.add_argument(
+        "--front",
+        metavar="START-END",
+        help="前置页暂存范围（舍弃前的临时页序号）；可省略",
+    )
     parser.add_argument(
         "--front-names",
         metavar="NAME[,NAME...]",
@@ -54,10 +58,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--front-modules",
         metavar="NAME=START-END,...",
-        help="前置语义模块范围，例如 cover=1,dedication=2-3,toc=4-8；禁止页码式名称",
+        help="前置语义模块范围（舍弃后的 front 分区连续序号），例如 cover=1,dedication=2-3,toc=4-8；禁止页码式名称",
     )
-    parser.add_argument("--body", required=True, metavar="START-END", help="正文暂存范围")
-    parser.add_argument("--back", metavar="START-END", help="后置页暂存范围；可省略")
+    parser.add_argument(
+        "--body",
+        required=True,
+        metavar="START-END",
+        help="正文暂存范围（舍弃前的临时页序号）",
+    )
+    parser.add_argument(
+        "--back",
+        metavar="START-END",
+        help="后置页暂存范围（舍弃前的临时页序号）；可省略",
+    )
     parser.add_argument(
         "--back-names",
         metavar="NAME[,NAME...]",
@@ -66,7 +79,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--back-modules",
         metavar="NAME=START-END,...",
-        help="后置语义模块范围，例如 afterword=1-3,references=4-6；禁止页码式名称",
+        help="后置语义模块范围（舍弃后的 back 分区连续序号），例如 afterword=1-3,references=4-6；禁止页码式名称",
     )
     parser.add_argument(
         "--class-name",
@@ -497,6 +510,27 @@ def main() -> int:
                 raise RuntimeError(f"旧正文文件含有人工作品，拒绝删除: {path}")
             originals[path] = path.read_bytes()
             path.unlink()
+
+        # A changed page classification may make a generated semantic module
+        # obsolete. Remove only files that still carry the generator marker;
+        # refuse to guess when a human has already filled an old module.
+        generated_module_paths = {
+            latex / "front" / f"{name}.tex" for name in front_names
+        } | {latex / "back" / f"{name}.tex" for name in back_names}
+        for directory in (latex / "front", latex / "back"):
+            for path in directory.glob("*.tex"):
+                if path in generated_module_paths:
+                    continue
+                if path.is_symlink():
+                    raise RuntimeError(f"拒绝处理符号链接: {path}")
+                if not path.is_file():
+                    raise RuntimeError(f"旧语义模块不是普通文件，拒绝删除: {path}")
+                if not is_stub(read_text(path)):
+                    raise RuntimeError(
+                        f"旧语义模块包含人工内容，拒绝删除；请先人工处理: {path}"
+                    )
+                originals[path] = path.read_bytes()
+                path.unlink()
         for path, content in writes.items():
             write_atomic(path, content)
         installed_images = install_images(control, stage, image_names)

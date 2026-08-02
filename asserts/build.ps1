@@ -6,7 +6,7 @@ param(
     [ValidateSet('book', 'workbook', 'matrix')]
     [string]$Target = 'book',
     [ValidateSet('examples', 'exercises', 'all')]
-    [string]$Scope = 'all',
+    [string[]]$Scope = @(),
     [ValidateSet('original', 'pad11', 'pad13', 'a4')]
     [string]$Profile = 'original',
     [ValidateSet('print', 'eyecare')]
@@ -37,6 +37,16 @@ Assert-Command 'latexmk'
 Assert-Command 'xelatex'
 if (-not $SkipVisualCheck) { Assert-Command 'pdftoppm' }
 
+if ($Target -eq 'book' -and $Profile -ne 'original') {
+    throw '完整书不接受 A4/Pad profile；请确认原书尺寸并使用 original。'
+}
+if ($Target -eq 'book' -and $Scope.Count -gt 0) {
+    throw '完整书不接受 workbook scope；请使用 -Target workbook 或 matrix。'
+}
+if ($Target -eq 'matrix' -and ($Profile -ne 'original' -or $Theme -ne 'print')) {
+    throw 'matrix 会固定生成完整书的 print/eyecare 和全部做题本 profile；请改用单目标 workbook 调整轴。'
+}
+
 function New-Job([string]$Kind, [string]$JobName, [string]$ScopeName,
     [string]$ProfileName, [string]$ThemeName) {
     [pscustomobject]@{
@@ -49,17 +59,26 @@ function New-Job([string]$Kind, [string]$JobName, [string]$ScopeName,
 }
 
 $jobs = [System.Collections.Generic.List[object]]::new()
-if ($Target -eq 'book' -or $Target -eq 'matrix') {
-    $jobs.Add((New-Job 'book' 'book-print' 'all' 'original' 'print'))
-    if ($Target -eq 'matrix') {
-        $jobs.Add((New-Job 'book' 'book-eyecare' 'all' 'original' 'eyecare'))
-    }
+if ($Target -eq 'book') {
+    # A complete book always uses the confirmed original paper size.  Theme is
+    # the only single-target axis accepted here.
+    $jobs.Add((New-Job 'book' "book-$Theme" 'all' 'original' $Theme))
 }
 if ($Target -eq 'workbook') {
-    $jobs.Add((New-Job 'workbook' "workbook-$Scope-$Profile-$Theme" $Scope $Profile $Theme))
+    if ($Scope.Count -ne 1) {
+        throw 'Target workbook 需要恰好一个 -Scope；矩阵目标可用逗号传入多个实际题型。'
+    }
+    $scopeName = $Scope[0]
+    $jobs.Add((New-Job 'workbook' "workbook-$scopeName-$Profile-$Theme" $scopeName $Profile $Theme))
 }
 if ($Target -eq 'matrix') {
-    foreach ($scopeName in @('examples', 'exercises', 'all')) {
+    # Matrix mode always covers both themes for the complete book.  Workbook
+    # scopes are opt-in: pass only question types that exist in this source;
+    # an omitted scope means no workbook target is generated.
+    foreach ($themeName in @('print', 'eyecare')) {
+        $jobs.Add((New-Job 'book' "book-$themeName" 'all' 'original' $themeName))
+    }
+    foreach ($scopeName in ($Scope | Select-Object -Unique)) {
         foreach ($profileName in @('original', 'pad11', 'pad13', 'a4')) {
             foreach ($themeName in @('print', 'eyecare')) {
                 $jobs.Add((New-Job 'workbook' "workbook-$scopeName-$profileName-$themeName" `

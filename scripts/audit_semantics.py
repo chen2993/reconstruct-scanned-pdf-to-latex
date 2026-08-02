@@ -16,10 +16,13 @@ from typing import Any
 CONTROL_DIR = ".reconstruct-scanned-pdf-to-latex"
 CONFIG_FILENAME = "semantic-audit.json"
 ROOT_OWNER = "$root"
-# Hyphens are valid in filenames, but not in LaTeX environment, command,
-# counter, or configuration identifiers.  Reject them at the audit boundary.
-ENVIRONMENT_NAME = re.compile(r"[A-Za-z@][A-Za-z0-9@*:_]*")
-COMMAND_NAME = re.compile(r"[A-Za-z@][A-Za-z0-9@:_]*")
+# Hyphens are valid in filenames, but not in custom LaTeX environment,
+# command, counter, or configuration identifiers. Standard LaTeX layout
+# environments have a separate starred form (for example ``figure*``), so the
+# source parser accepts one trailing star while semantic configuration sets
+# remain strict identifiers.
+IDENTIFIER_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*")
+ENVIRONMENT_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_]*(?:\*)?")
 
 DEFAULT_OWNER_ENVIRONMENTS = frozenset(
     {
@@ -301,7 +304,7 @@ def load_config(project: Path) -> tuple[AuditConfig, Path | None]:
         loaded_path = config_path
 
     owner_environments = _configured_set(
-        payload, "owner_environments", DEFAULT_OWNER_ENVIRONMENTS, ENVIRONMENT_NAME
+        payload, "owner_environments", DEFAULT_OWNER_ENVIRONMENTS, IDENTIFIER_NAME
     )
     config = AuditConfig(
         owner_environments=owner_environments,
@@ -310,10 +313,10 @@ def load_config(project: Path) -> tuple[AuditConfig, Path | None]:
             payload,
             "cross_page_owner_environments",
             DEFAULT_CROSS_PAGE_OWNER_ENVIRONMENTS,
-            ENVIRONMENT_NAME,
+            IDENTIFIER_NAME,
         ),
         structure_commands=_configured_set(
-            payload, "structure_commands", DEFAULT_STRUCTURE_COMMANDS, COMMAND_NAME
+            payload, "structure_commands", DEFAULT_STRUCTURE_COMMANDS, IDENTIFIER_NAME
         ),
         media_environments=_configured_set(
             payload, "media_environments", DEFAULT_MEDIA_ENVIRONMENTS, ENVIRONMENT_NAME
@@ -322,13 +325,13 @@ def load_config(project: Path) -> tuple[AuditConfig, Path | None]:
             payload,
             "answer_owner_environments",
             DEFAULT_ANSWER_OWNER_ENVIRONMENTS,
-            ENVIRONMENT_NAME,
+            IDENTIFIER_NAME,
         ),
         question_owner_environments=_configured_set(
             payload,
             "question_owner_environments",
             DEFAULT_QUESTION_OWNER_ENVIRONMENTS,
-            ENVIRONMENT_NAME,
+            IDENTIFIER_NAME,
         ),
         answer_media_environments=_configured_set(
             payload,
@@ -659,26 +662,95 @@ def audit_source(
     return seen_question
 
 
-def page_sort_key(path: Path, section_index: int) -> tuple[int, int, str]:
-    match = re.search(r"(\d+)(?=\.tex$)", path.name)
-    number = int(match.group(1)) if match else sys.maxsize
-    return section_index, number, path.name
-
-
 def collect_pages(project: Path) -> list[Path]:
     latex = project / "latex"
-    # The canonical source stream is front, then numbered body pages, then back.
-    sections = ("front", "pages", "back")
-    pages: list[Path] = []
-    for section_index, section in enumerate(sections):
+    main = latex / "main.tex"
+    if not main.is_file():
+        raise ConfigurationError(f"缺少唯一入口: {main}")
+    for section in ("front", "pages", "back"):
         directory = latex / section
         if not directory.is_dir():
             raise ConfigurationError(f"缺少逐页目录: {directory}")
-        section_pages = [path for path in directory.glob("*.tex") if path.is_file()]
-        pages.extend(sorted(section_pages, key=lambda path: page_sort_key(path, section_index)))
-    if not pages:
-        raise ConfigurationError("三个逐页目录中没有找到直接子级 .tex 文件")
-    return pages
+
+    try:
+        source = main.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ConfigurationError(f"无法读取入口 {main}: {exc}") from exc
+    source = strip_comments(source)
+    token_pattern = re.compile(
+        r"\\input\s*\{([^{}]+)\}|\\bookinput\s*\{(\d+)\}\s*\{(\d+)\}"
+    )
+    ordered: list[Path] = []
+    seen: set[Path] = set()
+    body_ranges: list[tuple[int, int]] = []
+
+    def add_module(token: str) -> None:
+        normalized = token.strip().replace("\\", "/")
+        parts = Path(normalized).parts
+        if len(parts) != 2 or parts[0] not in {"front", "back"}:
+            raise ConfigurationError(
+                "main.tex 的前后置必须使用 \\input{front/TYPE} 或 \\input{back/TYPE}；"
+                "正文必须使用唯一的 \\bookinput 范围"
+            )
+        filename = parts[1] if parts[1].endswith(".tex") else f"{parts[1]}.tex"
+        candidate = latex / parts[0] / filename
+        if candidate.parent != latex / parts[0] or not candidate.is_file():
+            raise ConfigurationError(f"main.tex 引用的模块不存在或不是直接子级文件: {token}")
+        if candidate in seen:
+            raise ConfigurationError(f"main.tex 重复加载模块: {token}")
+        seen.add(candidate)
+        ordered.append(candidate)
+
+    for match in token_pattern.finditer(source):
+        token = match.group(1)
+        if token is not None:
+            add_module(token)
+            continue
+        start = int(match.group(2))
+        end = int(match.group(3))
+        if start != 1 or end < start:
+            raise ConfigurationError(
+                "main.tex 的正文必须以唯一的 \\bookinput{1}{N} 开始并保持有效范围"
+            )
+        body_ranges.append((start, end))
+
+    if len(body_ranges) != 1:
+        raise ConfigurationError("main.tex 必须包含且只包含一条 \\bookinput{1}{N}")
+    _, body_end = body_ranges[0]
+    body_directory = latex / "pages"
+    width = max(3, len(str(body_end)))
+    body_paths: list[Path] = []
+    for number in range(1, body_end + 1):
+        candidate = body_directory / f"pages-{number:0{width}d}.tex"
+        if not candidate.is_file():
+            raise ConfigurationError(f"\\bookinput 引用的正文页不存在: {candidate}")
+        body_paths.append(candidate)
+    actual_body = {
+        path
+        for path in body_directory.glob("pages-*.tex")
+        if path.is_file()
+    }
+    expected_body = set(body_paths)
+    if actual_body != expected_body:
+        extras = sorted(actual_body - expected_body)
+        if extras:
+            raise ConfigurationError(
+                "pages 中存在未由唯一 \\bookinput 导入的正文页: "
+                + ", ".join(path.name for path in extras)
+            )
+    ordered.extend(body_paths)
+
+    for section in ("front", "back"):
+        directory = latex / section
+        actual = {path for path in directory.glob("*.tex") if path.is_file()}
+        referenced = {path for path in seen if path.parent == directory}
+        missing = sorted(actual - referenced)
+        if missing:
+            raise ConfigurationError(
+                f"{section} 中存在未由 main.tex 导入的模块: "
+                + ", ".join(path.name for path in missing)
+            )
+    return ordered
 
 
 def audit_file_boundary(

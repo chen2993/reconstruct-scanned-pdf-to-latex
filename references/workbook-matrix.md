@@ -13,6 +13,14 @@
 
 没有对应题型或用户未要求时，不生成空目标。每个目标还可选择 `print` 或护眼黄 `eyecare` 主题。若实际 `.cls` 提供语义小节强制分页接口，再为做题本增加 `section-break=false/true` 两个变体；这不是完整书维度，也不能凭空加入不存在的接口。
 
+参考 `asserts/build.ps1` 的 `matrix` 目标会固定生成完整书的 `print` 和 `eyecare` 两个主题；做题本题型是显式选择的，只有传入实际存在的范围才会生成。例如：
+
+```powershell
+./build.ps1 -Target matrix -Scope examples,all
+```
+
+省略 `-Scope` 时只生成两个完整书目标，不会猜测或生成例题/习题做题本。单目标 `-Target workbook` 必须只传一个 `-Scope`。
+
 ## 版式契约
 
 - `original` 和 `a4`：题目与答题区自然向下排版，但同一个完整逻辑题目及其答题区不得跨页。
@@ -44,7 +52,7 @@
 \input{main}
 ```
 
-完整书 driver 例如 `\def\BookBuildOptions{book,print}`。项目 `.cls` 应把这些选项映射到集中视图和样式钩子，并由 `main.tex` 的公共条件命令控制必要的前后置差异。页面文件不应根据目标写条件分支，也不应复制题目或答案。
+完整书 driver 例如 `\def\BookBuildOptions{book,print}`。项目 `.cls` 应把这些选项映射到集中视图和样式钩子；入口模块清单保持静态，必要的前后置差异在模块内部用公共条件命令控制。页面文件不应根据目标写条件分支，也不应复制题目或答案。
 
 ## 必测组合
 

@@ -12,17 +12,21 @@
 % visual implementation, but it should keep the axes independent.
 \newcommand{\book@initialmode}{full}
 \newcommand{\book@initialscope}{all}
-\newcommand{\book@initialprofile}{a4}
+% A workbook must name a confirmed original size explicitly.  A4 remains an
+% available workbook option, but is never the implicit full-book size.
+\newcommand{\book@initialprofile}{original}
 \newcommand{\book@initialtheme}{print}
+\newif\ifbook@scopeoptionseen
+\newif\ifbook@profileoptionseen
 \DeclareOption{book}{\renewcommand{\book@initialmode}{full}}
 \DeclareOption{workbook}{\renewcommand{\book@initialmode}{workbook}}
-\DeclareOption{examples}{\renewcommand{\book@initialscope}{examples}}
-\DeclareOption{exercises}{\renewcommand{\book@initialscope}{exercises}}
-\DeclareOption{all}{\renewcommand{\book@initialscope}{all}}
-\DeclareOption{original}{\renewcommand{\book@initialprofile}{original}}
-\DeclareOption{a4}{\renewcommand{\book@initialprofile}{a4}}
-\DeclareOption{pad11}{\renewcommand{\book@initialprofile}{pad11}}
-\DeclareOption{pad13}{\renewcommand{\book@initialprofile}{pad13}}
+\DeclareOption{examples}{\renewcommand{\book@initialscope}{examples}\book@scopeoptionseentrue}
+\DeclareOption{exercises}{\renewcommand{\book@initialscope}{exercises}\book@scopeoptionseentrue}
+\DeclareOption{all}{\renewcommand{\book@initialscope}{all}\book@scopeoptionseentrue}
+\DeclareOption{original}{\renewcommand{\book@initialprofile}{original}\book@profileoptionseentrue}
+\DeclareOption{a4}{\renewcommand{\book@initialprofile}{a4}\book@profileoptionseentrue}
+\DeclareOption{pad11}{\renewcommand{\book@initialprofile}{pad11}\book@profileoptionseentrue}
+\DeclareOption{pad13}{\renewcommand{\book@initialprofile}{pad13}\book@profileoptionseentrue}
 \DeclareOption{print}{\renewcommand{\book@initialtheme}{print}}
 \DeclareOption{eyecare}{\renewcommand{\book@initialtheme}{eyecare}}
 \DeclareOption*{\PassOptionsToClass{\CurrentOption}{ctexbook}}
@@ -36,7 +40,7 @@
 
 % --------------------------------------------------------------------------
 % Front and back modules are explicit in main.tex. Body pages use \bookinput,
-% which loads pages/pages-001.tex through pages/pages-999.tex in order.
+% which loads the requested pages/pages-xxx.tex range in order.
 % File names may contain hyphens; command and environment names below do not.
 % --------------------------------------------------------------------------
 
@@ -198,42 +202,57 @@
 }
 
 \newcommand{\booksetworkbookscope}[1]{%
-  \edef\book@requestedscope{#1}%
-  \ifdefstring{\book@requestedscope}{examples}{\def\book@workbookscope{examples}}{%
-    \ifdefstring{\book@requestedscope}{exercises}{\def\book@workbookscope{exercises}}{%
-      \ifdefstring{\book@requestedscope}{all}{\def\book@workbookscope{all}}{%
-        \ClassError{base}{Unknown workbook scope `\book@requestedscope'}%
-          {Use examples, exercises, or all.}%
+  \ifbook@workbook
+    \edef\book@requestedscope{#1}%
+    \ifdefstring{\book@requestedscope}{examples}{\def\book@workbookscope{examples}}{%
+      \ifdefstring{\book@requestedscope}{exercises}{\def\book@workbookscope{exercises}}{%
+        \ifdefstring{\book@requestedscope}{all}{\def\book@workbookscope{all}}{%
+          \ClassError{base}{Unknown workbook scope `\book@requestedscope'}%
+            {Use examples, exercises, or all.}%
+        }%
       }%
     }%
-  }%
+  \else
+    \ClassError{base}{Workbook scope requires workbook mode}%
+      {Remove examples/exercises/all from a full-book build.}%
+  \fi
 }
 
 % Optional workbook axes. A project class decides the actual geometry and
 % heading treatment; these setters keep configuration orthogonal and make
 % unsupported values fail instead of silently changing the full-book view.
 \newcommand{\booksetworkbookstyle}[1]{%
-  \edef\book@requestedworkbookstyle{#1}%
-  \ifdefstring{\book@requestedworkbookstyle}{simple}{%
-    \def\book@workbookstyle{simple}%
-  }{\ifdefstring{\book@requestedworkbookstyle}{normal}{%
-    \def\book@workbookstyle{normal}%
-  }{%
-    \ClassError{base}{Unknown workbook style `\book@requestedworkbookstyle'}%
-      {Use simple or normal.}%
-  }}%
+  \ifbook@workbook
+    \edef\book@requestedworkbookstyle{#1}%
+    \ifdefstring{\book@requestedworkbookstyle}{simple}{%
+      \def\book@workbookstyle{simple}%
+    }{\ifdefstring{\book@requestedworkbookstyle}{normal}{%
+      \def\book@workbookstyle{normal}%
+    }{%
+      \ClassError{base}{Unknown workbook style `\book@requestedworkbookstyle'}%
+        {Use simple or normal.}%
+    }}%
+  \else
+    \ClassError{base}{Workbook style requires workbook mode}%
+      {Do not set a workbook style for the complete book.}%
+  \fi
 }
 
 \newcommand{\booksetworkbooksectionbreak}[1]{%
-  \edef\book@requestedsectionbreak{#1}%
-  \ifdefstring{\book@requestedsectionbreak}{true}{%
-    \book@workbooksectionbreaktrue
-  }{\ifdefstring{\book@requestedsectionbreak}{false}{%
-    \book@workbooksectionbreakfalse
-  }{%
-    \ClassError{base}{Unknown workbook section-break value `\book@requestedsectionbreak'}%
-      {Use true or false.}%
-  }}%
+  \ifbook@workbook
+    \edef\book@requestedsectionbreak{#1}%
+    \ifdefstring{\book@requestedsectionbreak}{true}{%
+      \book@workbooksectionbreaktrue
+    }{\ifdefstring{\book@requestedsectionbreak}{false}{%
+      \book@workbooksectionbreakfalse
+    }{%
+      \ClassError{base}{Unknown workbook section-break value `\book@requestedsectionbreak'}%
+        {Use true or false.}%
+    }}%
+  \else
+    \ClassError{base}{Workbook section breaks require workbook mode}%
+      {Do not set section breaks for the complete book.}%
+  \fi
 }
 
 \newcommand{\bookifworkbookstyle}[2]{%
@@ -744,24 +763,29 @@
 }
 
 \newcommand{\booksetworkbookprofile}[1]{%
-  \edef\book@requestedprofile{#1}%
-  \ifdefstring{\book@requestedprofile}{original}{%
-    \ifx\book@originalwidth\@empty
-      \ClassError{base}{Original paper size is not configured}%
-        {Call \string\booksetoriginalpagesize before selecting original.}%
-    \else
-      \geometry{paperwidth=\book@originalwidth,paperheight=\book@originalheight,margin=15mm}%
-    \fi
-  }{\ifdefstring{\book@requestedprofile}{pad11}{%
-    \geometry{paperwidth=280mm,paperheight=193mm,margin=14mm}%
-  }{\ifdefstring{\book@requestedprofile}{pad13}{%
-    \geometry{paperwidth=280mm,paperheight=210mm,margin=15mm}%
-  }{\ifdefstring{\book@requestedprofile}{a4}{%
-    \geometry{a4paper,margin=18mm}%
-  }{%
-    \ClassError{base}{Unknown workbook profile `\book@requestedprofile'}%
-      {Use original, pad11, pad13, or a4.}%
-  }}}}%
+  \ifbook@workbook
+    \edef\book@requestedprofile{#1}%
+    \ifdefstring{\book@requestedprofile}{original}{%
+      \ifx\book@originalwidth\@empty
+        \ClassError{base}{Original paper size is not configured}%
+          {Call \string\booksetoriginalpagesize before selecting original.}%
+      \else
+        \geometry{paperwidth=\book@originalwidth,paperheight=\book@originalheight,margin=15mm}%
+      \fi
+    }{\ifdefstring{\book@requestedprofile}{pad11}{%
+      \geometry{paperwidth=280mm,paperheight=193mm,margin=14mm}%
+    }{\ifdefstring{\book@requestedprofile}{pad13}{%
+      \geometry{paperwidth=280mm,paperheight=210mm,margin=15mm}%
+    }{\ifdefstring{\book@requestedprofile}{a4}{%
+      \geometry{a4paper,margin=18mm}%
+    }{%
+      \ClassError{base}{Unknown workbook profile `\book@requestedprofile'}%
+        {Use original, pad11, pad13, or a4.}%
+    }}}}%
+  \else
+    \ClassError{base}{Workbook paper profiles require workbook mode}%
+      {A complete book must use its confirmed original paper size.}%
+  \fi
 }
 
 \definecolor{BookReferenceEyePage}{HTML}{F5F0C8}
@@ -781,6 +805,15 @@
 \ifbook@workbook
   \booksetworkbookscope{\book@initialscope}%
   \booksetworkbookprofile{\book@initialprofile}%
+\else
+  \ifbook@scopeoptionseen
+    \ClassError{base}{Workbook scope option used in full-book mode}%
+      {Use workbook,examples|exercises|all for a workbook target.}%
+  \fi
+  \ifbook@profileoptionseen
+    \ClassError{base}{Workbook paper profile used in full-book mode}%
+      {Complete books use the confirmed original paper size and do not take a profile option.}%
+  \fi
 \fi
 \booksettheme{\book@initialtheme}
 

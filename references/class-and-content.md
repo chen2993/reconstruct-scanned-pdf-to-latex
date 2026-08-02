@@ -22,7 +22,9 @@
 - `main.tex` 是唯一目标和编排入口；它接收 driver 提供的 `\BookBuildOptions`，在 `\documentclass` 前通过 `\PassOptionsToClass` 交给项目 `.cls`，不实现第二套样式；
 - `latex/pages/figures/*.tex` 只定义可嵌入的矢量主体，页面或语义环境拥有题注、标签、引用和显示条件。
 
-环境、命令、计数器、标签键和内部 API 必须使用英文 ASCII 标识符，只允许 ASCII 字母/数字和必要的下划线；不得使用中文、中文词组或连字符。中文可以作为正文、题注或角色显示文本的值，但不能成为任何 LaTeX 名称。连字符可以出现在文件名和页面标识中，但不能出现在这些 LaTeX 标识符中。
+`asserts/base.cls` 只用于理解接口形状，不是项目模板、父类或视觉值来源。参考类的 `original` profile 不提供默认尺寸；使用 workbook/original 前必须由项目设置器写入经人工确认的原书尺寸。`a4`、`pad11`、`pad13` 只属于做题本选项，完整书不能传入这些 profile。
+
+自定义环境、命令、计数器、标签键和配置 API 必须使用英文 ASCII 标识符，只允许 ASCII 字母/数字和必要的下划线；不得使用中文、中文词组或连字符。标准 LaTeX 的带星号布局环境（如 `figure*`、`equation*`、`align*`）只作为既有布局环境使用，不能给自定义语义所有者加星号。中文可以作为正文、题注或角色显示文本的值，但不能成为任何 LaTeX 名称。连字符可以出现在文件名和页面标识中，但不能出现在这些 LaTeX 标识符中。
 
 ### 页面分型与教材可选结构
 
@@ -62,15 +64,15 @@
 ```
 
 项目 `.cls` 必须实现 `\bookinput` 接口，按三位编号依次加载 `pages/pages-001.tex` 至 `pages/pages-584.tex`；不得以不同命令替代，也不得让 `main.tex` 展开为正文逐条 `\input`。接口必须在缺页、范围倒置或编号非法时明确报错，不能静默跳过。前置和后置仍不得改成批量范围加载器。一个前置或后置模块可以在同一文件中自然生成多页。
-若 workbook 需要跳过序言或替换目录，类文件应提供英文命名的公共条件命令（参考 `\bookifworkbook`），由同一个 `main.tex` 控制模块顺序；不得创建 `main-workbook.tex`。
+若 workbook 需要改变序言或目录的显示，入口中的模块清单仍保持静态并可被审计；在同一个模块内部使用英文命名的公共条件命令（参考 `\bookifworkbook`）控制内容，不得在 `main.tex` 条件分支中选择另一套文件，也不得创建 `main-workbook.tex`。
 
-每个源码文件只保留一个最终页面标识注释，例如：
+正文逐页文件只保留一个最终页面标识注释，例如：
 
 ```tex
 % Source page: pages-023
 ```
 
-禁止写入物理页号、逐页成品页码、中间目录或拆分批次。
+前置/后置模块可以自然扩展为多页，因此可用 `% Source pages:` 列出该模块覆盖的多个最终标识；禁止写入物理页号、逐页成品页码、中间目录或拆分批次。
 
 ## 3. 环境全覆盖
 
@@ -81,7 +83,7 @@
 | 所有者域 | 参考环境或命令 | 覆盖内容 |
 |---|---|---|
 | 结构 | `bookpart`、`bookchapter`、`booksection`、`booksubsection` | 篇、章、节、小节及其目录、书签和页眉页脚 |
-| 前后置 | `bookfrontmatter`、`bookbackmatter`、`booksupplement` | 封面、献词、序言、目录说明、后记和补充说明 |
+| 前后置 | `bookfrontmatterblock`、`bookbackmatterblock`、`booksupplement` | 封面、献词、序言、目录说明、后记和补充说明 |
 | 正文 | `bookbody`、`booktext`、`bookexposition` | 普通段落、连接语、列表、引文、脚注和边注 |
 | 知识 | `bookdefinition`、`booktheorem`、`booklemma`、`bookproof` | 定义、定理、引理、证明和知识块 |
 | 题目 | `bookexample`、`bookexercise`、`bookquestion` | 例题、习题、一般题目及跨页题干 |
