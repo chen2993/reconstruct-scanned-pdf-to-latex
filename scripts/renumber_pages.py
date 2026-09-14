@@ -25,6 +25,11 @@ from page_workspace import control_dir, resolve_workspace  # noqa: E402
 CONTROL_DIR = ".reconstruct-scanned-pdf-to-latex"
 PAGE_NAME = re.compile(r"page-(\d{3,})\.png")
 BODY_TEX_NAME = re.compile(r"pages-(\d{3,})\.tex")
+# 页面标识的编号格式固定为三位最小宽度（``pages-001``），超过三位自然变宽
+# （``pages-999`` 之后是 ``pages-1000``）。这正是类文件 ``\bookinput`` 拼文件名
+# 用的规则；若改成按总页数统一补零，1000 页的书会生成 ``pages-0001.tex``，
+# 而类文件去加载 ``pages-001.tex``，缺页只在编译时才暴露。
+PAGE_NUMBER_FORMAT = "03d"
 # Logical module names become LaTeX input names and must not introduce a
 # hyphenated identifier into the generated source.
 SEMANTIC_NAME = re.compile(r"[a-z][a-z0-9_]*")
@@ -415,9 +420,11 @@ def main() -> int:
             ("body", body_range, []),
             ("back", back_range, back_modules),
         ):
-            width = max(3, len(str(len(section_range))))
             for section_page, source_index in enumerate(section_range, 1):
-                identifier = f"{section if section != 'body' else 'pages'}-{section_page:0{width}d}"
+                identifier = (
+                    f"{section if section != 'body' else 'pages'}"
+                    f"-{section_page:{PAGE_NUMBER_FORMAT}}"
+                )
                 image_name = f"{identifier}.png"
                 os.link(paths[source_index - 1], stage / image_name)
                 image_names.append(image_name)
@@ -442,7 +449,7 @@ def main() -> int:
                 module_name, module_pages[module_name]
             )
         for index in range(1, body_count + 1):
-            identifier = f"pages-{index:03d}"
+            identifier = f"pages-{index:{PAGE_NUMBER_FORMAT}}"
             writes[latex / "pages" / f"{identifier}.tex"] = page_stub(identifier)
 
         block = import_block(front_names, body_count, back_names)

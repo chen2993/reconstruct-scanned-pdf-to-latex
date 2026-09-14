@@ -313,10 +313,12 @@ def collect_pages(project: Path) -> list[Path]:
         raise ConfigurationError("main.tex 必须包含且只包含一条 \\bookinput{1}{N}")
     _, body_end = body_ranges[0]
     body_directory = latex / "pages"
-    width = max(3, len(str(body_end)))
+    # 正文文件名宽度由类文件的 \bookinput 决定：三位起，超过三位就自然地变宽
+    # （``pages-001`` … ``pages-999``、``pages-1000``）。按页数重新推导宽度会让
+    # 1000 页的书去找 ``pages-0001.tex``，而类文件加载的是 ``pages-001.tex``。
     body_paths: list[Path] = []
     for number in range(1, body_end + 1):
-        candidate = body_directory / f"pages-{number:0{width}d}.tex"
+        candidate = body_directory / f"pages-{number:03d}.tex"
         if not candidate.is_file():
             raise ConfigurationError(f"\\bookinput 引用的正文页不存在: {candidate}")
         body_paths.append(candidate)
