@@ -17,14 +17,15 @@ CONTROL_DIR = ".reconstruct-scanned-pdf-to-latex"
 
 DIRECTORIES = (
     "docs",
+    "latex/assets",
     "latex/front",
     "latex/back",
     "latex/pages/figures",
-    "asserts",
+    "template",
     "scripts",
     "dist",
     "tmp",
-    f"{CONTROL_DIR}/extraced",
+    f"{CONTROL_DIR}/extracted",
     f"{CONTROL_DIR}/reviews",
 )
 
@@ -32,9 +33,9 @@ README = """# 扫描教材 LaTeX 重建项目
 
 - `docs/`：项目说明；`class-api.md` 记录项目类文件的实际接口。
 - `latex/`：从零实现的项目专用 `.cls`、前置页、正文、后置页和矢量图源码。
-- `asserts/`：参考类文件、构建脚本或其他不属于正文事实的辅助资源。
+- `template/`：参考类文件、构建脚本或其他不属于正文事实的辅助资源。
 - `.reconstruct-scanned-pdf-to-latex/`：最终页面标识、修正规则、样式卡片和复核材料。
-- `.reconstruct-scanned-pdf-to-latex/extraced/`：拆页和方向修正期间的临时逐页 PNG；重编号成功后清理。
+- `.reconstruct-scanned-pdf-to-latex/extracted/`：拆页和方向修正期间的临时逐页 PNG；重编号成功后清理。
 - `cover-facsimile` 和仅含 `publication-info` 的页面只作为输入审计证据，重编号时按规则舍去，不生成最终页面或源码。
 - `dist/`：最终成品；`tmp/`：可删除的临时文件。
 
@@ -54,7 +55,7 @@ README = """# 扫描教材 LaTeX 重建项目
 """
 
 GITIGNORE = """# 可从源 PDF 和配置重建的大体积页图
-/.reconstruct-scanned-pdf-to-latex/extraced/
+/.reconstruct-scanned-pdf-to-latex/extracted/
 /.reconstruct-scanned-pdf-to-latex/*.png
 
 # 构建缓存与成品
@@ -132,7 +133,7 @@ CLASS_API = """# 项目类文件 API
 
 本文件是待填写的实际接口记录骨架，在样式实现阶段与项目 `.cls` 同步维护。
 只记录实际存在且已经编译验证的接口，不预先登记命令、环境或视觉样式。
-`asserts/base.cls` 只可用于理解接口形状，不是项目模板、父类或视觉值来源。
+`template/base.cls` 只可用于理解接口形状，不是项目模板、父类或视觉值来源。
 自定义环境、命令、计数器、标签键和配置 API 的名称必须是英文 ASCII 标识符；标准 LaTeX 的带星号布局环境只能按既有环境使用，不能给自定义语义所有者加星号；中文只能写入正文或显示文本值。
 
 ## 类文件
@@ -201,6 +202,7 @@ CLASS_API = """# 项目类文件 API
 `.reconstruct-scanned-pdf-to-latex/semantic-audit.json` 与本矩阵同步维护。阶段 6
 把项目实际使用的所有者环境、`owner_parent_environments` 直接父级白名单、
 `cross_page_owner_environments`、结构命令、内部布局环境、题目环境、答案环境和答案专属媒体写入配置；集合中的值是完整替换而非增量追加。白名单的键是子所有者，值是允许的直接父所有者数组，`$root` 表示根所有者。跨页集合只能登记同时位于所有者集合中的流式环境；审计器允许它们跨连续源码文件，但在完整输入结束时仍要求闭合。
+`forbidden_commands` 拒绝逐页源码自带的目录条目、书签、手工计数器和 `\\input`/`\\include` 入口职责；`standalone_commands` 放行前后置模块可直接调用的集中接口（如自动目录与书签指令）。
 每次公共接口变更后运行语义审计和常规编译复核，再把二者标记为已验证。
 
 ## 显示模式布尔组合
@@ -324,6 +326,17 @@ STYLE_CARDS = """# 样式卡片
 | 待填写 | 普通正文或其他类型 | 普通正文 | 待填写 | 待填写 | 待填写 | 待填写 | 待填写 | 待覆盖 |
 """
 
+ANSWER_SENTINELS = """# 答案哨兵
+
+做题本的答案隔离证据：每行写一条**只出现在答案侧**的短句（答案、解析、提示、
+证明、答案专属媒体的原文片段），`#` 开头为注释行。构建脚本用
+`-AnswerSentinels` 读取本文件，逐页在成品 PDF 文本层中比对；命中即判该目标失败。
+
+比对前会去掉全部空白，因此不必担心 LaTeX 在中西文边界插入空格或长行折行。
+“答案”“解”这类通用词不能当哨兵——它们也可能出现在题干或页眉里。
+原件没有例题或习题时本文件只保留注释，也不生成做题本目标。
+"""
+
 REVIEW_FILES = {
     "style.md": (
         "# 样式复核\n\n"
@@ -369,15 +382,45 @@ def write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8", newline="\n")
 
 
+SKILL_ROOT = Path(__file__).resolve().parent.parent
+
+
+def copy_toolchain(stage: Path) -> None:
+    """Copy the deterministic toolchain so the project is self-contained.
+
+    ``build.ps1`` resolves the audit scripts relative to the project root, so
+    a project that does not carry ``scripts/`` cannot be built or verified.
+    """
+    source_scripts = SKILL_ROOT / "scripts"
+    for source in sorted(source_scripts.rglob("*.py")):
+        # Tests and one-off harnesses are not part of the project toolchain.
+        if "__pycache__" in source.parts or "tests" in source.parts:
+            continue
+        relative = source.relative_to(source_scripts)
+        target = stage / "scripts" / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+
+    source_template = SKILL_ROOT / "template"
+    if source_template.is_dir():
+        target_template = stage / "template"
+        target_template.mkdir(parents=True, exist_ok=True)
+        for source in sorted(source_template.iterdir()):
+            if source.is_file():
+                shutil.copyfile(source, target_template / source.name)
+
+
 def populate(stage: Path) -> None:
     for relative in DIRECTORIES:
         (stage / relative).mkdir(parents=True, exist_ok=True)
+    copy_toolchain(stage)
     write_text(stage / "README.MD", README)
     write_text(stage / ".gitignore", GITIGNORE)
     write_text(stage / ".gitattributes", GITATTRIBUTES)
     write_text(stage / "docs" / "class-api.md", CLASS_API)
     write_text(stage / CONTROL_DIR / "progress.md", PROGRESS)
     write_text(stage / CONTROL_DIR / "style-cards.md", STYLE_CARDS)
+    write_text(stage / CONTROL_DIR / "answer-sentinels.txt", ANSWER_SENTINELS)
     for name, content in REVIEW_FILES.items():
         write_text(stage / CONTROL_DIR / "reviews" / name, content)
     write_text(

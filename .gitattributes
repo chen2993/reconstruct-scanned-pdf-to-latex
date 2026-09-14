@@ -1,0 +1,30 @@
+# 统一行尾为 LF，避免在 Windows 上因 core.autocrlf 造成反复的
+# “LF will be replaced by CRLF” 噪音和不可控的换行。
+* text=auto eol=lf
+
+*.md text eol=lf
+*.tex text eol=lf diff=tex
+*.cls text eol=lf diff=tex
+*.sty text eol=lf diff=tex
+*.bib text eol=lf
+*.ps1 text eol=lf
+*.psm1 text eol=lf
+*.psd1 text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.tif binary
+*.tiff binary
+*.zip binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary

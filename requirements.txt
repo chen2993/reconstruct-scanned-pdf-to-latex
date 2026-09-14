@@ -1,0 +1,8 @@
+# scripts/ 的第三方依赖。
+# 标准库之外只用这些；用 pip install -r requirements.txt 安装。
+
+# PDF 对象读取与页面栅格化（split_pdf / audit_pdf_outline / audit_page_density）
+PyMuPDF>=1.24
+
+# 页图像素处理与旋转（split_pdf / correct_pages）
+Pillow>=10

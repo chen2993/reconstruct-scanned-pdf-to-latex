@@ -18,6 +18,9 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from page_workspace import control_dir, resolve_workspace  # noqa: E402
+
 
 CONTROL_DIR = ".reconstruct-scanned-pdf-to-latex"
 PAGE_NAME = re.compile(r"page-(\d{3,})\.png")
@@ -51,11 +54,6 @@ def parse_args() -> argparse.Namespace:
         help="前置页暂存范围（舍弃前的临时页序号）；可省略",
     )
     parser.add_argument(
-        "--front-names",
-        metavar="NAME[,NAME...]",
-        help="兼容格式：前置页一页一个语义类型名；禁止页码式名称",
-    )
-    parser.add_argument(
         "--front-modules",
         metavar="NAME=START-END,...",
         help="前置语义模块范围（舍弃后的 front 分区连续序号），例如 cover=1,dedication=2-3,toc=4-8；禁止页码式名称",
@@ -70,11 +68,6 @@ def parse_args() -> argparse.Namespace:
         "--back",
         metavar="START-END",
         help="后置页暂存范围（舍弃前的临时页序号）；可省略",
-    )
-    parser.add_argument(
-        "--back-names",
-        metavar="NAME[,NAME...]",
-        help="兼容格式：后置页一页一个语义类型名；禁止页码式名称",
     )
     parser.add_argument(
         "--back-modules",
@@ -151,23 +144,6 @@ def validate_module_name(name: str, option: str) -> None:
         )
 
 
-def parse_names(value: str | None, count: int, option: str, section: str) -> list[str]:
-    if count == 0:
-        if value is not None and value.strip().lower() not in {"", "none"}:
-            raise RuntimeError(f"{option} 不能在没有 {section} 页时使用。")
-        return []
-    if value is None or not value.strip() or value.strip().lower() == "none":
-        raise RuntimeError(f"{section} 页存在时必须提供 {option} 或对应的 modules 选项。")
-    names = [item.strip() for item in value.split(",")]
-    if len(names) != count:
-        raise RuntimeError(f"{option} 需要 {count} 个名称，实际得到 {len(names)} 个。")
-    for name in names:
-        validate_module_name(name, option)
-    if len(names) != len(set(names)):
-        raise RuntimeError(f"{option} 不能包含重复名称。")
-    return names
-
-
 def parse_modules(value: str | None, count: int, option: str, section: str) -> list[dict[str, Any]]:
     if count == 0:
         if value is not None and value.strip().lower() not in {"", "none"}:
@@ -202,15 +178,9 @@ def resolve_modules(
     section: str,
     count: int,
     module_value: str | None,
-    names_value: str | None,
 ) -> list[dict[str, Any]]:
-    if module_value is not None and names_value is not None:
-        raise RuntimeError(f"{section} 不能同时使用 modules 和 names。")
     if module_value is not None:
         return parse_modules(module_value, count, f"{section}-modules", section)
-    if names_value is not None:
-        names = parse_names(names_value, count, f"{section}-names", section)
-        return [{"name": name, "start": i, "end": i} for i, name in enumerate(names, 1)]
     if count:
         raise RuntimeError(f"{section} 页存在时必须提供 --{section}-modules。")
     return []
@@ -256,6 +226,10 @@ def page_stub(identifier: str) -> str:
     )
 
 
+# 目录模块的自动目录指令是类文件契约的一部分，不是原书内容，因此骨架阶段就写入；
+# 其余模块的可见标题必须来自原件，只能留提示不能预填。
+AUTO_TOC_MODULE = "toc"
+
 def module_stub(name: str, identifiers: list[str]) -> str:
     lines = [
         "% Generated logical module stub; replace with reconstructed content.",
@@ -264,12 +238,15 @@ def module_stub(name: str, identifiers: list[str]) -> str:
         f"% The first content page must call \\bookbookmarkmodule{{VISIBLE TITLE}}{{{name}}}.",
     ]
     lines.extend(f"%   {identifier}" for identifier in identifiers)
+    if name == AUTO_TOC_MODULE:
+        lines.append("% 目录模块必须恰好调用一次集中自动目录指令，内容由 .cls 生成。")
+        lines.append("\\bookmaketoc")
     return "\n".join(lines) + "\n"
 
 
 def is_stub(text: str) -> bool:
-    return text.startswith("% Generated page stub;") or text.startswith(
-        "% Generated logical module stub;"
+    return text.startswith(
+        ("% Generated page stub;", "% Generated logical module stub;")
     )
 
 
@@ -330,7 +307,7 @@ def is_signed_import_block(block: str) -> bool:
     return bool(re.fullmatch(r"[0-9a-f]{64}", expected)) and expected == actual
 
 
-def replace_import_block(text: str, block: str, legacy_block: str) -> str:
+def replace_import_block(text: str, block: str) -> str:
     begin = text.find(MAIN_BEGIN)
     end = text.find(MAIN_END)
     if begin < 0 or end < begin:
@@ -339,11 +316,10 @@ def replace_import_block(text: str, block: str, legacy_block: str) -> str:
         raise RuntimeError("main.tex 的生成入口标记重复。")
     end += len(MAIN_END)
     current_block = text[begin:end].replace("\r\n", "\n")
-    # A signed block is script-owned and may be regenerated when the page
-    # ranges change.  An unsigned block is accepted only when it exactly
-    # matches the previous script output; any other edit may be a human
-    # reordering and must stop instead of being silently overwritten.
-    if not is_signed_import_block(current_block) and current_block != legacy_block:
+    # The signature proves the block is script-owned, so it may be regenerated
+    # when the page ranges change.  An unsigned block may be a human reordering
+    # and must stop the run instead of being silently overwritten.
+    if not is_signed_import_block(current_block):
         raise RuntimeError(
             "main.tex 的生成入口区块已被人工修改；请先移除或恢复该区块后再重编号。"
         )
@@ -388,8 +364,8 @@ def restore_files(originals: dict[Path, bytes | None]) -> None:
 def main() -> int:
     args = parse_args()
     project = args.project.resolve()
-    control = project / CONTROL_DIR
-    pages_dir = control / "extraced"
+    control = control_dir(project)
+    pages_dir = resolve_workspace(project)
     latex = project / "latex"
     if not project.is_dir() or not control.is_dir():
         print(f"项目尚未初始化: {project}", file=sys.stderr)
@@ -425,8 +401,8 @@ def main() -> int:
             raise RuntimeError(
                 "front、body、back 必须完整覆盖未舍去的暂存页并保持顺序。"
             )
-        front_modules = resolve_modules("front", len(front_range), args.front_modules, args.front_names)
-        back_modules = resolve_modules("back", len(back_range), args.back_modules, args.back_names)
+        front_modules = resolve_modules("front", len(front_range), args.front_modules)
+        back_modules = resolve_modules("back", len(back_range), args.back_modules)
 
         stage.mkdir()
         image_names: list[str] = []
@@ -470,16 +446,6 @@ def main() -> int:
             writes[latex / "pages" / f"{identifier}.tex"] = page_stub(identifier)
 
         block = import_block(front_names, body_count, back_names)
-        legacy_block_lines = [
-            MAIN_BEGIN,
-            "% 前后置逐条导入；正文使用类文件的范围命令。",
-            *[f"\\input{{front/{name}}}" for name in front_names],
-        ]
-        if body_count:
-            legacy_block_lines.append(f"\\bookinput{{1}}{{{body_count}}}")
-        legacy_block_lines.extend(f"\\input{{back/{name}}}" for name in back_names)
-        legacy_block_lines.append(MAIN_END)
-        legacy_block = "\n".join(legacy_block_lines)
         main_path = latex / "main.tex"
         if main_path.exists():
             if main_path.is_symlink():
@@ -487,11 +453,11 @@ def main() -> int:
             current = read_text(main_path)
             if MAIN_BEGIN not in current or MAIN_END not in current:
                 raise RuntimeError("已有 main.tex 没有完整生成入口标记，拒绝覆盖。")
-            writes[main_path] = replace_import_block(current, block, legacy_block)
+            writes[main_path] = replace_import_block(current, block)
         else:
             writes[main_path] = main_template(args.class_name, block)
 
-        for path, content in writes.items():
+        for path in writes:
             if path.is_symlink():
                 raise RuntimeError(f"拒绝覆盖符号链接: {path}")
             if path.exists() and not is_stub(read_text(path)) and path.name != "main.tex":

@@ -15,6 +15,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from page_workspace import control_dir, resolve_workspace  # noqa: E402
+from pdf_backend import require_pymupdf  # noqa: E402
+
 
 CONTROL_DIR = ".reconstruct-scanned-pdf-to-latex"
 
@@ -22,7 +26,7 @@ CONTROL_DIR = ".reconstruct-scanned-pdf-to-latex"
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "将 PDF 拆为 extraced/page-xxx.png；不读取文字层、不执行 OCR。"
+            "将 PDF 拆为 extracted/page-xxx.png；不读取文字层、不执行 OCR。"
             "默认优先保留整页扫描图的原始像素网格。"
         )
     )
@@ -202,7 +206,8 @@ def save_embedded_image(
         from PIL import Image
     except ImportError as exc:
         raise RuntimeError(
-            "直取扫描页需要 Pillow；安装 Pillow，或显式使用 --image-source render。"
+            "直取扫描页需要 Pillow；先运行 pip install -r requirements.txt，"
+            "或显式使用 --image-source render。"
         ) from exc
 
     xref = int(info["xref"])
@@ -256,7 +261,7 @@ def save_embedded_image(
 
 
 def render_page(page: Any, destination: Path, dpi: int) -> dict[str, Any]:
-    import fitz
+    fitz = require_pymupdf()
 
     scale = dpi / 72.0
     pixmap = page.get_pixmap(
@@ -283,8 +288,8 @@ def main() -> int:
     args = parse_args()
     project = args.project.resolve()
     pdf = args.pdf.resolve()
-    control = project / CONTROL_DIR
-    output = control / "extraced"
+    control = control_dir(project)
+    output = resolve_workspace(project, create=True)
 
     if not project.is_dir() or not control.is_dir():
         print(f"项目尚未初始化: {project}", file=sys.stderr)
@@ -300,15 +305,12 @@ def main() -> int:
     except ValueError:
         pass
     else:
-        print("源 PDF 不得放在 extraced 输出目录内。", file=sys.stderr)
+        print("源 PDF 不得放在拆页输出目录内。", file=sys.stderr)
         return 2
 
     stage = output.parent / f".{output.name}.stage-{uuid.uuid4().hex}"
     try:
-        try:
-            import fitz
-        except ImportError as exc:
-            raise RuntimeError("缺少 PyMuPDF，请先安装 pymupdf。") from exc
+        fitz = require_pymupdf()
 
         source_hash = sha256(pdf)
         stage.mkdir()
@@ -379,8 +381,6 @@ def main() -> int:
             "source_pdf": {"path": str(pdf), "sha256": source_hash},
             "page_image_source": args.image_source,
             "fallback_render_dpi": args.dpi,
-            # Keep this field for projects initialized with the earlier script.
-            "dpi": args.dpi,
             "page_source_summary": {
                 "embedded_image": embedded_count,
                 "rendered_page": rendered_count,
@@ -398,7 +398,7 @@ def main() -> int:
         if stage.exists():
             shutil.rmtree(stage, ignore_errors=True)
         print(
-            f"拆页失败，原 extraced 目录保持不变: {type(exc).__name__}: {exc}",
+            f"拆页失败，原拆页目录保持不变: {type(exc).__name__}: {exc}",
             file=sys.stderr,
         )
         return 1

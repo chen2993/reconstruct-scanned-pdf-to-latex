@@ -7,6 +7,9 @@ import argparse
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from pdf_backend import require_pymupdf  # noqa: E402
+
 SEMANTIC_KEYS = ("cover", "preface", "dedication", "backmatter")
 DEFAULT_REQUIRED_MAP = (
     "cover=封面",
@@ -77,9 +80,8 @@ def validate_outline(
         if level == 1:
             top_level.setdefault(title, []).append(page)
 
-    if outline and isinstance(outline[0], (list, tuple)) and outline[0]:
-        if outline[0][0] != 1:
-            errors.append("PDF outline 必须从顶层书签开始。")
+    if outline and isinstance(outline[0], (list, tuple)) and outline[0] and outline[0][0] != 1:
+        errors.append("PDF outline 必须从顶层书签开始。")
 
     for title in required.values():
         targets = top_level.get(title, [])
@@ -101,7 +103,7 @@ def validate_outline(
 def target_pages_are_nonblank(document: object, pages: list[int]) -> list[int]:
     """Render only required target pages and reject completely blank pages."""
 
-    import fitz
+    fitz = require_pymupdf()
 
     blank: list[int] = []
     for page_number in pages:
@@ -138,11 +140,7 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 2
 
-    try:
-        import fitz
-    except ImportError as exc:
-        print("缺少 PyMuPDF；PDF outline 审计需要 pymupdf。", file=sys.stderr)
-        return 2
+    fitz = require_pymupdf()
 
     try:
         with fitz.open(args.pdf) as document:
