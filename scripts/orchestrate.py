@@ -272,13 +272,13 @@ def cmd_next(project: Path, force: bool) -> int:
         key for key in order if batches[key]["status"] in {"dispatched", "in_progress"}
     ]
     limit = int(state.get("concurrency", 1) or 1)
-    if in_flight and not force:
+    # 并发上限是“最多同时有几个批次在飞”，不是一个 boolean 开关。
+    # 达到上限后排队，而不是继续叠加；`--force` 只在确知可并行时越过它。
+    if len(in_flight) >= limit and not force:
         print(
-            "仍有未验收的批次: "
+            f"已有 {len(in_flight)} 个批次未验收（并发上限 {limit}）: "
             + ", ".join(in_flight)
-            + "；先 verify 再派下一批（并发上限 "
-            + str(limit)
-            + "）。",
+            + "；先 verify 再派下一批。",
             file=sys.stderr,
         )
         return 1

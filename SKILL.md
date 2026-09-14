@@ -165,7 +165,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 分派任务时把“样式摘要版本 + 该批样式卡片 + 该批页面分型 + 源页标识 + 允许修改的文件白名单”写进任务，不让执行单元自行猜测或参照其它页面。
 
 调度节奏用 `scripts/orchestrate.py` 固定下来：`plan` 切批 → `next` 生成任务包 → 单元转写 → `verify` 校验 → `checkpoint` 提交检查点 → 再 `next`。
-任务包自带样式摘要版本、文件白名单、逐页分型、跨页交接和停工反馈格式；存在未验收批次时 `next` 会拒绝派发，`checkpoint` 只提交通过校验的批次。
+任务包自带样式摘要版本、文件白名单、逐页分型、跨页交接和停工反馈格式；在飞批次数达到并发上限时 `next` 会排队而不是继续派发（`plan --concurrency` 设定上限），`checkpoint` 只提交通过校验的批次。
 
 - 执行单元只写自己分配的文件；`.cls`、`main.tex`、`semantic-audit.json`、样式卡片、审计配置和 Git 只由主执行者修改。
   需要新样式时在 `reviews/style-gaps.md` 报告并暂停，不做就地近似。

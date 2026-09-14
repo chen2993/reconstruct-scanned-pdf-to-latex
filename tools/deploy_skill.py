@@ -128,9 +128,10 @@ def main() -> int:
             failures += 1
 
     print(
-        "\n技能目录内不会带 "
+        "\n本仓库同时保存开发材料（"
         + "、".join(junk_when_linked())
-        + " 的语义：它们只存在于本仓库，加载技能时不参与。"
+        + "）。技能加载只读取 SKILL.md、references/、scripts/ 与 template/，"
+        "这些开发材料不会进入模型上下文。"
     )
     return 1 if failures else 0
 

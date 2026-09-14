@@ -66,6 +66,21 @@ def test_next_force_overrides_the_gate(planned):
     forced = orchestrate(planned, "next", "--force")
     assert forced.returncode == 0
 
+def test_concurrency_allows_that_many_batches_in_flight(batch_project):
+    """并发上限是同时在跑的批次数，不是一个 boolean 派发门。"""
+
+    orchestrate(batch_project, "plan", "--batch", "10", "--concurrency", "2")
+    assert orchestrate(batch_project, "next").returncode == 0
+    # 第二个批次仍可派发：1 个在飞 < 上限 2
+    assert orchestrate(batch_project, "next").returncode == 0
+    state = batch_project.dispatch_state()
+    assert state["batches"]["b001-010"]["status"] == "dispatched"
+    assert state["batches"]["b011-020"]["status"] == "dispatched"
+    # 达到上限后必须排队
+    blocked = orchestrate(batch_project, "next")
+    assert blocked.returncode == 1
+    assert "并发上限 2" in blocked.stderr
+
 
 def test_packet_reports_cross_page_handoff(batch_project):
     # an example spans pages 6..7, i.e. inside the first batch
