@@ -300,3 +300,5 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - `scripts/audit_pdf_build.py`：成品 PDF 的对象层审计；整页位图包装和做题本答案哨兵泄漏判为硬失败。
 - `scripts/page_workspace.py`：拆页临时工作区（`extracted/`）路径解析。
 - `scripts/orchestrate.py`：调度批次、生成单元任务包、校验批次产出并提交 Git 检查点（`plan`/`next`/`verify`/`checkpoint`/`status`）。
+
+开发期工具（不属于重建流程，仅维护本技能时使用）：`tools/deploy_skill.py` 把技能目录以联接方式挂到 Codex 与 Claude Code 的技能目录，`--status` 查看现状、`--remove` 移除；`tools/make_fixture_pdf.py` 生成无文字层的演练用图片型 PDF。回归测试在 `tests/`，其中 `tests/mutation_check.py` 会临时注入已知缺陷以确认测试确实能捕获它们。

@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 
 BS = chr(92)
-SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+REPO = Path(__file__).resolve().parent.parent
+SCRIPTS = REPO / "scripts"
 
 
 def run_script(name: str, *args: object, cwd: Path | None = None) -> subprocess.CompletedProcess:
