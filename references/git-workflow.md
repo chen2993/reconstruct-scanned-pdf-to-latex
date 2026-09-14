@@ -44,6 +44,23 @@ git -C <project> commit -m "<message>"
 
 人工明确确认后才创建审核标签。标签只标记已提交、工作树干净且人工已审核的状态。
 
+## 批量检查点
+
+逐批转写时用调度器的 `checkpoint` 命令提交，不要手工 `git add`：
+
+```powershell
+python -X utf8 scripts/orchestrate.py <project> checkpoint b001-010
+python -X utf8 scripts/orchestrate.py <project> checkpoint b001-010 --dry-run
+python -X utf8 scripts/orchestrate.py <project> checkpoint b001-010 -m "<agent><content> transcribe pages 001-010"
+```
+
+- 只提交该批白名单内的 `latex/pages/pages-xxx.tex`（显式路径，绝不 `git add -A`），其他改动不会被捎带提交；
+- 提交前先跑该批校验（文件存在、非占位骨架、来源页标记齐全、该批语义审计通过）；未通过则**拒绝提交**；
+- 缺省提交消息按规范自动生成为 `<agent><content> transcribe pages 001-010`；
+- 成功后把提交短哈希写回 `dispatch.json`，作为该批的检查点。
+
+因此常规节奏是：`next` → 单元转写 → `verify` → `checkpoint` → 再 `next`。手工提交仅在调度器不适用时使用。
+
 ## 跨页交接
 
-连续批次边界落在开放的跨页所有者内时，主执行者在分派记录中交接环境名、起始页面标识、样式卡片版本和嵌套层级。后续单元只能在原有环境内继续写内容，并在实际逻辑结束处写唯一的 `\end{...}`；不得用额外环境、片段命令或手工编号重建边界。交接信息是临时协作上下文，不写入页面映射或成品元数据。
+交接的内容与格式见 [collaboration-and-baseline.md](collaboration-and-baseline.md)；交接信息是临时协作上下文，不写入页面映射或成品元数据，因此**不作为提交内容**单独保存在 Git 里。
