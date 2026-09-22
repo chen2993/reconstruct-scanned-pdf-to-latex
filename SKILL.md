@@ -56,6 +56,36 @@ description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译�
 - 引用一律来自 LaTeX 交叉引用：`\label`、`\ref`、`\hyperref` 和集中配置的 hyperref，禁止手写跳转字符串、手工 anchor、裸编号或“见第 X 章”式人工编号。
   主题必须覆盖链接颜色：在每种已实现主题（`print`、护眼，以及项目实现的深色等）下，链接、框、表格和页眉页脚都要有清晰对比，深色等暗底主题不得沿用亮蓝链接。
 - 书内二维码、公众号、配套广告等非内容元素一律丢弃，不生成占位源码，也不在正文留下占位文字；同时含唯一题目或正文的页面不能整页丢弃。
+- 只转写原书印刷内容。**明显是后来在 PDF 上添加的人类批注**（手写笔记、红笔订正、荧光笔、圈画、勾叉、页边批注）不是原书内容：忽略它们，不转写、不建样式、不因它中断该页。
+  判断依据是“是否后期叠加”，不是“是否手写”：笔迹与印刷字明显不同、压住印刷文字、颜色溢出、脱离版心网格、或全书只在个别页孤立出现，都指向后期批注。
+  反过来，原书自己印出来的内容即使长得像手写（手写体例题、印刷旁注、影印批注、作者手迹）也必须照原样转写，不得误删。批注遮住必须转写的正文，或与印刷内容无法区分时才暂停确认。
+
+## 读取页面的方式
+
+页面内容只能靠运行环境原生多模态能力读，所以“怎么把页面送到模型眼前”本身就是工作流的一部分。扫描页常见 4000×6000 px 量级，远大于读取的舒适尺寸，而图片读取会**按长边等比例缩小**。由此推出唯一一条关键判据：
+
+> **宽度决定清晰度。** 把页面切成更短的横带不会让公式变清楚——横带仍是整幅宽度，照样被缩小；只有把宽度截窄（`--region` 指定列范围）才能看清公式、角标和表格线。
+
+统一用 `scripts/crop_page.py` 取图，不要另写裁剪脚本：
+
+```powershell
+# 总览：定位版面分区、栏数、图形位置（不要用它读公式）
+python -X utf8 scripts/crop_page.py <project> pages-013 tmp/over.png --overview
+
+# 横带：保留整行版式，顺序读一页的内容
+python -X utf8 scripts/crop_page.py <project> pages-013 tmp/b1.png --band 1/3
+
+# 区域：只截公式、表格或图所在的一块，比例基于整页
+python -X utf8 scripts/crop_page.py <project> pages-013 tmp/z.png --region 0.08,0.30,0.55,0.45
+```
+
+每次调用都会报告输出尺寸、源 dpi 与等效 dpi；提示“会被缩小”时说明这一块仍太宽，需要再截窄。据此决定看什么：
+
+- **先总览、再定位、后精读**。总览只用来确定“哪一段有公式/表格/图”，随后只截那一块。不要把整页均分成十几条逐条读完——那是把上下文花在空白和已读内容上。
+- **按需取块，块数越少越好**。一页通常只需 1–3 块就能覆盖所有需要细看的内容；正文段落用 `body` 级清晰度就够，只有公式、角标、表格线、图形标注才需要更高清晰度。
+- **一轮只看少量图**：默认一次 1–2 张。需要扫很多页时先用结构化信号缩小范围（页数、`MediaBox`、墨迹密度、日志警告），只打开命中异常的那几页。
+- **不靠放大补清晰度**：插值放大会同时放大模糊，占更多上下文却不增加信息。低分辨率页图只能回到拆页阶段用更高 DPI 重出。
+- **裁图只写 `tmp/`**，脚本会拒绝写入交付树；裁图是临时视觉证据，用完即弃，不得拼成跨页蒙太奇。
 
 ## 项目结构
 
@@ -90,6 +120,8 @@ project/
 
 按顺序执行以下阶段。公共接口或样式发生变化时，先更新类文件、API、样式卡片和审计配置，再恢复受影响批次。
 
+**交付优先级：先把完整书做出来。** 完整书是主交付物，分类视图与做题本矩阵是可选扩展。用户没有明确要求做题本、或原件本来就没有例题/习题时，不要为矩阵、主题或范围反复调整样式与脚本；先把全书正文转写完、编译通过、复核过，再按用户确认的范围补做题本。用户说“先不急着处理做题本”时立即停手，把精力放回正文。
+
 ### 1. 文件树搭建
 
 ```powershell
@@ -97,6 +129,8 @@ python <skill>/scripts/init_project.py <project> --git
 ```
 
 脚本创建目录、控制文件、`docs/class-api.md` 和复核表，并把技能的 `scripts/`（含 `semantics/` 包）与 `template/` 复制进项目，使项目自带可运行的工具链。它**不**创建项目 `.cls`，也**不**在项目根生成成品 `build.ps1`——这两者都要按原书实现。检查 `git status --short` 后提交初始化检查点。
+
+Windows 上路径常含中文、空格和全角括号。这类路径不要塞进 `python -c "..."` 或 `-Command` 的单行字符串：引号与代码页会把参数截断或改写（实测会把中文名变成乱码并报“unrecognized arguments”）。稳妥做法是把命令写成脚本文件再执行，或先 `cd` 到项目目录、用相对路径和简短英文文件名传参。
 
 初始化后先做一次只读输入审计，再拆页。判断原书页面大小时，优先检查书内印刷信息，再用页面几何交叉验证：
 
@@ -162,18 +196,18 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 ### 4.5 协作与并行纪律（跨阶段）
 
-并发只有建立在对齐基线上才可靠；
-详见 [references/collaboration-and-baseline.md](references/collaboration-and-baseline.md)。
-分派任务时把“样式摘要版本 + 该批样式卡片 + 该批页面分型 + 源页标识 + 允许修改的文件白名单”写进任务，不让执行单元自行猜测或参照其它页面。
+并发只有建立在对齐基线上才可靠。角色边界、任务包六要素、图片读取纪律、并发节奏与收敛门见
+[references/subagent-orchestration.md](references/subagent-orchestration.md)；批次基线与不可逆操作保护见
+[references/collaboration-and-baseline.md](references/collaboration-and-baseline.md)。
 
 调度节奏用 `scripts/orchestrate.py` 固定下来：`plan` 切批 → `next` 生成任务包 → 单元转写 → `verify` 校验 → `checkpoint` 提交检查点 → 再 `next`。
 任务包自带样式摘要版本、文件白名单、逐页分型、跨页交接和停工反馈格式；在飞批次数达到并发上限时 `next` 会排队而不是继续派发（`plan --concurrency` 设定上限），`checkpoint` 只提交通过校验的批次。
 
-- 执行单元只写自己分配的文件；`.cls`、`main.tex`、`semantic-audit.json`、样式卡片、审计配置和 Git 只由主执行者修改。
-  需要新样式时在 `reviews/style-gaps.md` 报告并暂停，不做就地近似。
-- 一次只推进一个批次（默认连续 10 页）：转写 → 内容复核 → 编译/版式复核 → 主执行者验收，再派下一批；上一批未验收不得派下一批，也不得把全量页面同时派出去。
-- 并发数按运行环境实际支持的上限取，达到上限后排队而不是重复派发；“已派发”不等于“已完成”，产物存在性和内容质量分开核对。
-- 原始需求、差异清单、发现的问题和结论写进 `progress.md` 和 `reviews/`，不写进页面源码；源码不保留“待提取”“承接上页”“续见 PDF 第 N 页”之类的转写笔记。
+原始需求、差异清单、发现的问题和结论写进 `progress.md` 和 `reviews/`，不写进页面源码；源码不保留“待提取”“承接上页”“续见 PDF 第 N 页”之类的转写笔记。
+
+### 4.6 能力预检（开工前）
+
+开始转写前必须先确认运行环境具备**原生多模态读取**与**任务分派**两项能力，并把结论写进 `progress.md`。任一缺失时立即停下来告知用户（缺哪一项、卡在哪一页），按单执行者串行或请用户切换模型，禁止改用 OCR 或 PDF 文本层替代。判据与处理方式见 [references/subagent-orchestration.md](references/subagent-orchestration.md) 第 0 节。
 
 ### 5. 样式总结与样式卡片
 
@@ -292,6 +326,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - [references/review-checklist.md](references/review-checklist.md)：结构、编译、视觉和人工复核门槛。
 - [references/git-workflow.md](references/git-workflow.md)：检查点、并行协作和提交消息格式。
 - [references/collaboration-and-baseline.md](references/collaboration-and-baseline.md)：多单元并行的批次纪律、任务清单、收敛门与不可逆操作保护。
+- [references/subagent-orchestration.md](references/subagent-orchestration.md)：能力预检、调度者与执行单元的职责边界、任务包六要素、并发节奏、交接与恢复。
 - [references/figures-and-assets.md](references/figures-and-assets.md)：结构图 TikZ 重建、书法题字矢量描摹、资产组织与逐图收敛。
 - [references/pagination-and-navigation.md](references/pagination-and-navigation.md)：页数漂移的定位与归因、目录排版的内部约定、PDF 书签规则。
 - `scripts/audit_toc.py`：目录模块与自动目录指令的静态审计。
@@ -301,6 +336,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - `scripts/audit_page_density.py`：按墨迹密度筛查异常稀疏页，帮助定位分页漂移；只做诊断，不判定对错。
 - `scripts/audit_pdf_build.py`：成品 PDF 的对象层审计；整页位图包装和做题本答案哨兵泄漏判为硬失败。
 - `scripts/page_workspace.py`：拆页临时工作区（`extracted/`）路径解析。
+- `scripts/crop_page.py`：单页取图工具（`--overview` 总览 / `--band` 横带 / `--region` 区域），报告输出尺寸与等效 dpi，裁图只允许写 `tmp/`。
 - `scripts/orchestrate.py`：调度批次、生成单元任务包、校验批次产出并提交 Git 检查点（`plan`/`next`/`verify`/`checkpoint`/`status`）。
 
 开发期工具（不属于重建流程，仅维护本技能时使用）：`tools/deploy_skill.py` 把技能目录以联接方式挂到 Codex 与 Claude Code 的技能目录，`--status` 查看现状、`--remove` 移除；`tools/make_fixture_pdf.py` 生成无文字层的演练用图片型 PDF。回归测试在 `tests/`，其中 `tests/mutation_check.py` 会临时注入已知缺陷以确认测试确实能捕获它们。
