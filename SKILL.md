@@ -339,4 +339,9 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - `scripts/crop_page.py`：单页取图工具（`--overview` 总览 / `--band` 横带 / `--region` 区域），报告输出尺寸与等效 dpi，裁图只允许写 `tmp/`。
 - `scripts/orchestrate.py`：调度批次、生成单元任务包、校验批次产出并提交 Git 检查点（`plan`/`next`/`verify`/`checkpoint`/`status`）。
 
-开发期工具（不属于重建流程，仅维护本技能时使用）：`tools/deploy_skill.py` 把技能目录以联接方式挂到 Codex 与 Claude Code 的技能目录，`--status` 查看现状、`--remove` 移除；`tools/make_fixture_pdf.py` 生成无文字层的演练用图片型 PDF。回归测试在 `tests/`，其中 `tests/mutation_check.py` 会临时注入已知缺陷以确认测试确实能捕获它们。
+开发期工具（不属于重建流程，仅维护本技能时使用）：
+
+- `tools/deploy_skill.py`：把本仓库以目录联接部署到本机运行时的技能目录，默认覆盖 4 个主用运行时（Codex `~/.codex/skills`、Claude Code `~/.claude/skills`、DSH `~/.dsh/skills`、Kimi Code `~/.kimi-code/skills`）。`--status` 查看现状，`--force` 把过期实体副本归档后改为联接，`--all` 或 `--only` 处理其它已安装工具，`--remove` 只移除联接。联接保证"改仓库即改技能"，不会出现副本漂移。
+- `tools/make_fixture_pdf.py`：生成无文字层的演练用图片型 PDF。
+
+回归测试在 `tests/`，其中 `tests/mutation_check.py` 会临时注入已知缺陷以确认测试确实能捕获它们。
