@@ -141,7 +141,7 @@ project/
 | 2 拆页 | `extracted/` 逐页 PNG + 清单 | 页数、像素、DPI、回退原因已核对 |
 | 3 修正 | `page-corrections.json` | 已**逐页看过**方向（即使无旋转也要跑一次） |
 | 4 命名 | `front-*.png`/`pages-*.png`、模块 `.tex`、`main.tex` | 证据页已显式舍去；临时工作区已清理 |
-| 5 样式卡片 | `style-cards.md` | 页面分型完成；用户已确认纸型 |
+| 5 样式卡片 | `style-cards.md`、结构地图 | 四步顺序走完（目录→代表页→汇总→扩样）；页面分型完成；用户已确认纸型 |
 | 6 样式实现 | `.cls`、`class-api.md`、`semantic-audit.json` | 每个新接口已编译验证；跨页环境已编译验证 |
 | 7 样式复核 | `reviews/style.md` | 达 90%、无语义/编号错误、无未关闭缺口；**人工已确认** |
 | 8 内容转写 | `pages-xxx.tex`（分批） | 每批：转写 → 复核 → 编译 → 验收；来源页标记齐全 |
@@ -245,7 +245,11 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 ### 4.6 能力预检（开工前）
 
-开始转写前必须先确认运行环境具备**原生多模态读取**与**任务分派**两项能力，并把结论写进 `progress.md`。任一缺失时立即停下来告知用户（缺哪一项、卡在哪一页），按单执行者串行或请用户切换模型，禁止改用 OCR 或 PDF 文本层替代。判据与处理方式见 [references/governance/subagent-orchestration.md](references/governance/subagent-orchestration.md) 第 0 节。
+开始转写前必须先确认运行环境具备**原生多模态读取**与**任务分派**两项能力，并把结论写进 `progress.md`。两件事都要分别确认：**我自己**能不能读图，**我要派的子代理**能不能读图。
+
+实测出现过**能力倒置**：主执行者调 `read_image` 返回「不支持视觉」，而派出的子代理能正常读图。此时**所有视觉工作（方向检查、页面分型、样式提取、转写、复核）都必须委托出去**，主执行者只做调度与验收。另外，派出的**下二级**代理可能被固定在无视觉路径上——不要让二级代理代读图片，那只会浪费往返。
+
+任一层都读不了图时，立即停下来告知用户（缺哪一项、卡在哪一页），请用户切换模型；禁止改用 OCR 或 PDF 文本层替代。判据与处理方式见 [subagent-orchestration.md](references/governance/subagent-orchestration.md) 第 0 节与 [dispatch-prompts.md](references/governance/dispatch-prompts.md) 第 0 节。
 
 ### 5. 样式总结与样式卡片
 
@@ -254,6 +258,8 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 样式卡片本身不得嵌入或复制页面图。
 样式卡片要覆盖实际存在的纸张/版心、奇偶页、章首页、各级标题、正文、列表/引文、页眉页脚、脚注/边注、公式、知识块、例题、习题、答案、图表、目录和特殊页，并说明辨识条件、环境/命令、视觉特征、显示视图及源页标识。
 用户先确认纸张尺寸；未知时标记待确认，不悄悄猜定。
+
+**样式提取适合并行，但顺序不能颠倒**：先看目录了解页面分布 → 按类型派发代表页并行判读 → 汇总成卡片 → 对存疑类型补充扩样（额外连看前几页）。第 4 步最容易被省掉，而它正是发现"同类型不同变体"的唯一机会。完整流程与派发模板见 [style-extraction.md](references/practice/style-extraction.md)；可直接套用的单元提示词见 [dispatch-prompts.md](references/governance/dispatch-prompts.md)。
 
 先完成页面分型，再补充语义样式卡：封面、版权/出版信息证据页、献词/序言、目录、章节首页、普通正文、图表或公式密集页、参考文献/索引/附录、封底或其他书末页。仅含证据的页面不创建输出样式卡；
 含序言、目录或正文等独有内容的混合页按保留内容建卡。教材不一定包含例题或习题；没有对应内容时标记“不适用”，不要为了填满卡片而虚构题目环境或生成空做题本目标。
@@ -388,14 +394,14 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 | 阶段 | 该读的文档 |
 |---|---|
 | 1-4 输入审计、拆页、修正、命名 | [practice/page-reading.md](references/practice/page-reading.md)、[contract/workbook-matrix.md](references/contract/workbook-matrix.md) |
-| 5 样式卡片 | [practice/style-cards.md](references/practice/style-cards.md) |
+| 5 样式卡片 | [practice/style-extraction.md](references/practice/style-extraction.md)、[practice/style-cards.md](references/practice/style-cards.md) |
 | 6 样式实现 | [contract/class-contract.md](references/contract/class-contract.md)、[practice/latex-pitfalls.md](references/practice/latex-pitfalls.md)、[template/base.cls](template/base.cls) |
 | 7 样式复核 | [practice/latex-pitfalls.md](references/practice/latex-pitfalls.md)、[governance/review-checklist.md](references/governance/review-checklist.md) |
 | 8 逐页转写 | [practice/page-reading.md](references/practice/page-reading.md)、[contract/page-authoring.md](references/contract/page-authoring.md) |
 | 9-10 矢量图 | [practice/figures-and-assets.md](references/practice/figures-and-assets.md) |
 | 11 全书复核 | [practice/pagination-and-navigation.md](references/practice/pagination-and-navigation.md)、[governance/review-checklist.md](references/governance/review-checklist.md) |
 | 12 矩阵构建 | [contract/workbook-matrix.md](references/contract/workbook-matrix.md) |
-| 并行协作（跨阶段） | [governance/subagent-orchestration.md](references/governance/subagent-orchestration.md)、[governance/collaboration-and-baseline.md](references/governance/collaboration-and-baseline.md) |
+| 并行协作（跨阶段） | [governance/subagent-orchestration.md](references/governance/subagent-orchestration.md)、[governance/collaboration-and-baseline.md](references/governance/collaboration-and-baseline.md)、[governance/dispatch-prompts.md](references/governance/dispatch-prompts.md) |
 | Git 检查点 | [governance/git-workflow.md](references/governance/git-workflow.md) |
 | 15 发布与开源（可选） | [governance/release-and-open-source.md](references/governance/release-and-open-source.md) |
 
@@ -408,6 +414,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 ### 手法层 `references/practice/`
 
 - [page-reading.md](references/practice/page-reading.md)：读页面的方式——宽度决定清晰度、读图预算、图文错配防护、视觉能力自检。
+- [style-extraction.md](references/practice/style-extraction.md)：并行样式提取的四步顺序（目录 → 代表页 → 汇总 → 扩样）、派发纪律、结构地图。
 - [style-cards.md](references/practice/style-cards.md)：样式卡片字段和代表页选择规则。
 - [figures-and-assets.md](references/practice/figures-and-assets.md)：矢量图重建策略（含函数图、3D 图、树图）、书法题字描摹、资产组织与逐图收敛。
 - [pagination-and-navigation.md](references/practice/pagination-and-navigation.md)：页数漂移的定位与归因、目录排版约定、PDF 书签规则。
@@ -417,6 +424,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 - [subagent-orchestration.md](references/governance/subagent-orchestration.md)：能力预检、调度者与执行单元的职责边界、任务包、车道、并发节奏。
 - [collaboration-and-baseline.md](references/governance/collaboration-and-baseline.md)：基线冻结、批次纪律、收敛门与不可逆操作保护。
+- [dispatch-prompts.md](references/governance/dispatch-prompts.md)：样式提取、结构地图、逐页转写、复核四类单元的派发提示词模板。
 - [review-checklist.md](references/governance/review-checklist.md)：结构、编译、视觉和人工复核门槛。
 - [git-workflow.md](references/governance/git-workflow.md)：检查点、提交消息格式。
 - [release-and-open-source.md](references/governance/release-and-open-source.md)：发布与开源的产物、权利边界、双通道打包、泄漏审计。
