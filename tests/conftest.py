@@ -114,8 +114,15 @@ def build_project(root: Path, body_end: int, config: dict | None = None) -> Proj
         + BS + f"bookinput{{1}}{{{body_end}}}\n",
         encoding="utf-8",
     )
+    # 与 renumber_pages.py 生成的骨架一致：模块必须列出其覆盖的最终标识，
+    # 否则 audit_provenance 的模块覆盖检查会报 missing_module_coverage。
     (root / "latex" / "front" / "cover.tex").write_text(
-        BS + "bookmaketoc\n", encoding="utf-8"
+        "% Generated logical module stub; replace with reconstructed content.\n"
+        "% Module: cover\n"
+        "% Source pages:\n"
+        "%   front-001\n"
+        + BS + "bookmaketoc\n",
+        encoding="utf-8",
     )
     project = Project(root)
     project.write_config(config if config is not None else MINIMAL_CONFIG)

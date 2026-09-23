@@ -29,6 +29,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_profiles import (  # noqa: E402
+    POINTS_PER_MM,
+    ProfileError,
+    expected_mm,
+    within_tolerance,
+)
 from pdf_backend import require_pymupdf  # noqa: E402
 
 # 单页被单张位图覆盖到该比例以上即视为整页图片包装。
@@ -56,6 +62,13 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=FULL_PAGE_RASTER_RATIO,
         help=f"判定整页位图的覆盖比例阈值（默认 {FULL_PAGE_RASTER_RATIO}）",
+    )
+    parser.add_argument(
+        "--profile",
+        help=(
+            "按该目标的纸型核对每页 MediaBox（a4/pad11/pad13，或项目已登记的尺寸名）；"
+            "省略时不核对尺寸，只报告实际纸型集合"
+        ),
     )
     parser.add_argument("--json", action="store_true", help="输出机器可读 JSON")
     return parser.parse_args()
@@ -91,6 +104,7 @@ def inspect(document: object, sentinels: list[str], raster_ratio: float) -> dict
     report: dict = {
         "pages": document.page_count,
         "media_boxes": [],
+        "page_sizes": [],
         "full_page_rasters": [],
         "blank_text_pages": [],
         "sentinel_hits": [],
@@ -102,6 +116,7 @@ def inspect(document: object, sentinels: list[str], raster_ratio: float) -> dict
         box = (round(page.rect.width, 1), round(page.rect.height, 1))
         if box not in report["media_boxes"]:
             report["media_boxes"].append(box)
+        report["page_sizes"].append(box)
         ratio = page_raster_ratio(page)
         if ratio >= raster_ratio:
             report["full_page_rasters"].append(
@@ -137,6 +152,34 @@ def main() -> int:
         return 1
 
     failures: list[str] = []
+    profile_note = ""
+    if args.profile:
+        try:
+            want_width, want_height = expected_mm(args.profile, pdf.parent)
+        except ProfileError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        # 逐页核对而不是只看集合：同一目标里混进别的纸型，只看"集合里有正确的那个"
+        # 会漏掉真正错的那几页。
+        page_sizes = report.get("page_sizes") or []
+        wrong = [
+            (index, size)
+            for index, size in enumerate(page_sizes, 1)
+            if not within_tolerance(
+                (size[0] / POINTS_PER_MM, size[1] / POINTS_PER_MM),
+                (want_width, want_height),
+            )
+        ]
+        profile_note = (
+            f"{args.profile} 期望 {want_width:.1f}×{want_height:.1f}mm"
+        )
+        for index, size in wrong:
+            failures.append(
+                f"第 {index} 页纸型不符：{size[0] / POINTS_PER_MM:.2f}×"
+                f"{size[1] / POINTS_PER_MM:.2f}mm，"
+                f"期望 {want_width:.2f}×{want_height:.2f}mm"
+            )
+
     for item in report["full_page_rasters"]:
         failures.append(
             f"第 {item['page']} 页被整页位图覆盖 {item['coverage']:.0%}；"
@@ -155,7 +198,8 @@ def main() -> int:
         return 1 if failures else 0
 
     boxes = "、".join(f"{width}×{height}pt" for width, height in report["media_boxes"])
-    print(f"页数 {report['pages']}；纸型集合 {boxes}")
+    profile_suffix = f"；核对 {profile_note}" if profile_note else ""
+    print(f"页数 {report['pages']}；纸型集合 {boxes}{profile_suffix}")
     if len(report["media_boxes"]) > 1:
         print("提示：本目标存在多种纸型，请确认这是设计意图而不是漏设的 profile。")
     if report["blank_text_pages"]:

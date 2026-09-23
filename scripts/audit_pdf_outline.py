@@ -16,13 +16,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pdf_backend import require_pymupdf  # noqa: E402
 
-# 常见的前后置模块及其默认显示标题，供项目按原件取舍；不是强制清单。
-REFERENCE_BOOKMARK_MAP = (
-    "cover=封面",
-    "preface=前言",
-    "dedication=献词",
-    "backmatter=书末页",
-)
+# 常见前后置模块的参考写法，仅用于提示命名习惯；不是默认值，也不是强制清单。
+# 项目必须按原书实际拥有的模块传入清单，原件没有前后置模块时不传即可。
+REFERENCE_BOOKMARK_EXAMPLE = "cover=封面 preface=前言 toc=目录 backmatter=书末页"
 # 语义键是 ASCII 标识符，与页面源码里的 key 参数一致。
 KEY_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
 
@@ -33,10 +29,8 @@ def parse_required_map(entries: list[str]) -> list[tuple[str, str]]:
     顺序有意义：它与原件的模块顺序一致，用于校验书签树的先后关系。
     """
 
-    if not entries:
-        raise ValueError(
-            "至少需要一个模块书签（例如 cover=封面）；请按原书实际存在的模块登记。"
-        )
+    # 允许为空：原件可能没有任何前后置模块（例如纯正文的扫描件）。此时不做书签
+    # 覆盖检查，但仍然校验 outline 自身的结构完整性。
     pairs: list[tuple[str, str]] = []
     for entry in entries:
         key, separator, title = entry.partition("=")
@@ -138,11 +132,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--required-map",
         nargs="+",
-        default=list(REFERENCE_BOOKMARK_MAP),
+        default=[],
         metavar="KEY=TITLE",
         help=(
-            "本项目实际存在的前后置模块及其书签显示标题，按原件顺序给出；"
-            "默认只是常见组合的参考，应替换为原书真实拥有的模块"
+            "本项目实际存在的前后置模块及其书签显示标题，按原件顺序给出，"
+            "例如 " + REFERENCE_BOOKMARK_EXAMPLE + "；"
+            "原件没有前后置模块时省略本参数，只检查 outline 结构"
         ),
     )
     return parser.parse_args()
@@ -183,12 +178,15 @@ def main() -> int:
             print(error, file=sys.stderr)
         return 1
 
-    print(
-        "PDF outline 通过："
-        + ", ".join(
-            f"{key}={title} -> {top_level[title][0]}" for key, title in required
+    if required:
+        print(
+            "PDF outline 通过："
+            + ", ".join(
+                f"{key}={title} -> {top_level[title][0]}" for key, title in required
+            )
         )
-    )
+    else:
+        print("PDF outline 结构通过：未登记前后置模块，跳过模块书签覆盖检查。")
     return 0
 
 

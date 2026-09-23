@@ -16,9 +16,9 @@ param(
     # print/eyecare。项目实现了别的主题（例如深色）时才追加，不预先假定。
     [string[]]$Themes = @('print', 'eyecare'),
     # 前后置模块按原书实际存在的情况登记，不是固定清单：原件有献词就必须登记
-    # 献词，没有就不该出现献词书签。默认值只是常见组合的参考，项目必须按自己的
-    # 模块清单传入 `-RequiredBookmarks`。顺序即原件的模块顺序。
-    [string[]]$RequiredBookmarks = @('cover=封面', 'preface=前言', 'dedication=献词', 'backmatter=书末页'),
+    # 献词，没有就不该出现献词书签；原件没有任何前后置模块（纯正文扫描件）时留空。
+    # 默认留空表示"不做模块书签覆盖检查"，只有 outline 结构检查。顺序即原件顺序。
+    [string[]]$RequiredBookmarks = @(),
     # 做题本目标必须提供答案哨兵文件：答案的位置和长度无法靠目视抽查保证，
     # 只能在构建时逐页比对。每行一条哨兵文本，`#` 开头为注释。
     [string]$AnswerSentinels = '',
@@ -95,9 +95,7 @@ if ($Target -ne 'matrix' -and $themeSet -notcontains $Theme) {
 $bookmarkEntries = @($RequiredBookmarks | ForEach-Object {
     $_ -split ',' | ForEach-Object { $_.Trim() }
 } | Where-Object { $_ })
-if ($bookmarkEntries.Count -lt 1) {
-    throw 'RequiredBookmarks 至少需要一个模块；请按原书实际存在的前后置模块登记。'
-}
+# 允许为空：原件可能没有任何前后置模块（纯正文扫描件），此时只做 outline 结构检查。
 $providedKeys = @()
 $providedTitles = @()
 foreach ($entry in $bookmarkEntries) {
@@ -179,7 +177,7 @@ function Invoke-LatexPass([string[]]$Arguments, [string]$JobName) {
     if ($LASTEXITCODE -ne 0) { throw "latexmk 第 $script:PassIndex 遍失败: $JobName" }
 }
 
-function Assert-Pdf([string]$Pdf, [string]$Log, [string]$JobName) {
+function Assert-Pdf([string]$Pdf, [string]$Log, [string]$JobName, [string]$ProfileName) {
     if (-not (Test-Path -LiteralPath $Pdf -PathType Leaf)) {
         throw "没有生成 PDF: $Pdf"
     }
@@ -217,6 +215,11 @@ function Assert-Pdf([string]$Pdf, [string]$Log, [string]$JobName) {
         throw "缺少成品审计脚本: $buildScript"
     }
     $buildArguments = @('-X', 'utf8', $buildScript, $Pdf)
+    # 完整书用项目登记的 original 尺寸；做题本用各自的 profile。逐页核对 MediaBox，
+    # 只报告"集合里有正确尺寸"会漏掉真正混错的那几页。
+    if (-not [string]::IsNullOrWhiteSpace($ProfileName)) {
+        $buildArguments += @('--profile', $ProfileName)
+    }
     if ($JobName -like 'workbook-*') {
         if ([string]::IsNullOrWhiteSpace($AnswerSentinels)) {
             throw "做题本目标必须提供 -AnswerSentinels 才能检查答案是否被隐藏: $JobName"
@@ -297,7 +300,9 @@ function Invoke-Job([object]$Job) {
     }
     $pdf = Join-Path $cache "$($Job.JobName).pdf"
     $log = Join-Path $cache "$($Job.JobName).log"
-    Assert-Pdf $pdf $log $Job.JobName
+    # 完整书用项目登记的 original 尺寸；做题本用各自的 profile。
+    $profileForAudit = if ($Job.Profile) { $Job.Profile } else { 'original' }
+    Assert-Pdf $pdf $log $Job.JobName $profileForAudit
     Write-Host "[$($Job.JobName)] OK"
     return [pscustomobject]@{ JobName = $Job.JobName; Pdf = $pdf }
 }

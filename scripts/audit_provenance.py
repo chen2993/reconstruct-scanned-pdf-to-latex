@@ -21,6 +21,10 @@ from pathlib import Path
 
 COMMENT_MARKER = re.compile(r"^\s*%\s*Source page:\s*(\S+)\s*$")
 PAGE_FILE = re.compile(r"^pages-(\d+)\.tex$")
+# 前后置模块的覆盖标记：`%   front-001`（`renumber_pages.py` 生成的骨架格式）。
+MODULE_MARKER = re.compile(r"^\s*%\s+(front|back)-(\d+)\s*$")
+MODULE_FILE = re.compile(r"^([a-z][a-z0-9_]*)\.tex$")
+SECTION_FOR_IDENTIFIER = {"front": "front", "pages": "pages", "back": "back"}
 
 
 @dataclass(frozen=True)
@@ -61,6 +65,105 @@ def markers_in(text: str, command: str) -> list[tuple[int, str]]:
         for match in command_pattern.finditer(line):
             found.append((number, match.group(1)))
     return found
+
+
+def audit_modules(project: Path) -> list[Finding]:
+    """审计前后置模块的来源页覆盖标记。
+
+    模块可能覆盖多页，因此用 `%   front-001` 这样的清单标注；这里要求：
+
+    * 每个前后置模块至少有一条覆盖标记（模块不可能凭空出现）；
+    * 标记分区必须与模块所在目录一致（`front/` 下不能写 `back-`）；
+    * 全书范围内每个最终标识只被一个模块声明，避免同一页被两个模块重复覆盖；
+    * 同一模块内的标识不重复、编号递增。
+
+    模块边界与原书页不是一一对应，所以这里只校验"覆盖关系自洽"，不要求连续。
+    """
+
+    findings: list[Finding] = []
+    owners: dict[str, str] = {}
+    for section in ("front", "back"):
+        directory = project / "latex" / section
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.glob("*.tex")):
+            relative = path.relative_to(project).as_posix()
+            if MODULE_FILE.fullmatch(path.name) is None:
+                findings.append(
+                    Finding(
+                        relative,
+                        0,
+                        "bad_module_filename",
+                        f"前后置模块文件名必须是语义类型名: {path.name}",
+                    )
+                )
+                continue
+            text = path.read_text(encoding="utf-8")
+            declared: list[tuple[int, str]] = []
+            for number, line in enumerate(text.splitlines(), start=1):
+                match = MODULE_MARKER.match(line)
+                if match is not None:
+                    declared.append((number, f"{match.group(1)}-{match.group(2)}"))
+            # 骨架里的示例标记 `%   front-001` 与真实内容标记同形，因此不区分
+            # "是否已填充"；真正的占位检测由调度器的 verify 负责。
+            if not declared:
+                findings.append(
+                    Finding(
+                        relative,
+                        0,
+                        "missing_module_coverage",
+                        "缺失来源页覆盖标记；应列出该模块覆盖的最终标识，"
+                        "例如 `%   front-001`",
+                    )
+                )
+                continue
+            seen: list[str] = []
+            previous = 0
+            for line, identifier in declared:
+                if SECTION_FOR_IDENTIFIER.get(identifier.split("-", 1)[0]) != section:
+                    findings.append(
+                        Finding(
+                            relative,
+                            line,
+                            "module_marker_section_mismatch",
+                            f"模块位于 {section}/，但标记写的是 {identifier!r}",
+                        )
+                    )
+                if identifier in seen:
+                    findings.append(
+                        Finding(
+                            relative,
+                            line,
+                            "module_marker_duplicate",
+                            f"模块内重复声明覆盖 {identifier!r}",
+                        )
+                    )
+                    continue
+                seen.append(identifier)
+                number = int(identifier.split("-", 1)[1])
+                if number <= previous:
+                    findings.append(
+                        Finding(
+                            relative,
+                            line,
+                            "module_marker_out_of_order",
+                            f"模块内覆盖标识不递增: {identifier!r}",
+                        )
+                    )
+                previous = number
+                owner = owners.get(identifier)
+                if owner is not None:
+                    findings.append(
+                        Finding(
+                            relative,
+                            line,
+                            "module_coverage_overlap",
+                            f"覆盖标记 {identifier!r} 已被 {owner} 声明",
+                        )
+                    )
+                else:
+                    owners[identifier] = relative
+    return findings
 
 
 def audit(project: Path, command: str) -> list[Finding]:
@@ -146,6 +249,7 @@ def audit(project: Path, command: str) -> list[Finding]:
             )
         previous_number = number
 
+    findings.extend(audit_modules(project))
     return findings
 
 

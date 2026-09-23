@@ -35,6 +35,7 @@ README = """# 扫描教材 LaTeX 重建项目
 - `latex/`：从零实现的项目专用 `.cls`、前置页、正文、后置页和矢量图源码。
 - `template/`：参考类文件、构建脚本或其他不属于正文事实的辅助资源。
 - `.reconstruct-scanned-pdf-to-latex/`：最终页面标识、修正规则、样式卡片和复核材料。
+- `.reconstruct-scanned-pdf-to-latex/profile-overrides.json`：原书纸型尺寸的单一事实源；`.cls` 与成品审计都读它。
 - `.reconstruct-scanned-pdf-to-latex/extracted/`：拆页和方向修正期间的临时逐页 PNG；重编号成功后清理。
 - `cover-facsimile` 和仅含 `publication-info` 的页面只作为输入审计证据，重编号时按规则舍去，不生成最终页面或源码。
 - `dist/`：最终成品；`tmp/`：可删除的临时文件。
@@ -326,6 +327,14 @@ STYLE_CARDS = """# 样式卡片
 | 待填写 | 普通正文或其他类型 | 普通正文 | 待填写 | 待填写 | 待填写 | 待填写 | 待填写 | 待覆盖 |
 """
 
+PROFILE_OVERRIDES = """{
+  "_comment": "纸型尺寸的单一事实源：.cls 与成品审计都读这里，避免两边各写一套。",
+  "_format": "名称: [宽mm, 高mm]；横向纸型按宽>高记录，与 PDF MediaBox 一致。",
+  "_builtin": "a4/pad11/pad13 已内置，无需在这里重复登记。",
+  "_required": "original 必须由人工确认原书尺寸后填入，否则成品审计会报错而不是猜一个常见开本。"
+}
+"""
+
 ANSWER_SENTINELS = """# 答案哨兵
 
 做题本的答案隔离证据：每行写一条**只出现在答案侧**的短句（答案、解析、提示、
@@ -421,6 +430,7 @@ def populate(stage: Path) -> None:
     write_text(stage / CONTROL_DIR / "progress.md", PROGRESS)
     write_text(stage / CONTROL_DIR / "style-cards.md", STYLE_CARDS)
     write_text(stage / CONTROL_DIR / "answer-sentinels.txt", ANSWER_SENTINELS)
+    write_text(stage / CONTROL_DIR / "profile-overrides.json", PROFILE_OVERRIDES)
     for name, content in REVIEW_FILES.items():
         write_text(stage / CONTROL_DIR / "reviews" / name, content)
     write_text(

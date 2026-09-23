@@ -26,6 +26,12 @@
 
 只处理单页：不读源 PDF、不做 OCR、不拼接多页、不生成联系页。输出只允许写进项目
 ``tmp/``——它是读取用的临时视觉证据，不属于交付物。
+
+两个实测经验：
+
+* **左右留 0.03 / 0.96**。正文常排到版心边沿，把 x 范围收到 0.09 会切掉行首字。
+* **不要用 ``--scale`` 放大补清晰度**。插值放大会同时放大模糊，只多占上下文；
+  看不清只能靠收窄宽度。
 """
 
 from __future__ import annotations
@@ -37,6 +43,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from page_workspace import control_dir  # noqa: E402
+from read_budget import BudgetError, charge_read  # noqa: E402
 
 
 SECTIONS = ("front", "pages", "back")
@@ -47,6 +54,11 @@ DEFAULT_OVERVIEW_WIDTH = 1100
 # 读取环节的参考长边上限。超过这个尺寸的图会被等比例缩小，等效 dpi 随之下降；
 # 这里只用来在输出里提示，不改变裁剪结果。
 READER_LONG_EDGE_HINT = 1600
+
+# 安全边距：正文常排到版心边沿，裁图时左右各留到这两个比例才不会被切掉行首/行末
+# 的字。实测把 x0 收到 0.09 时，「与」「所以」「该」「令」这类行首字会被切走。
+SAFE_X0 = 0.03
+SAFE_X1 = 0.96
 
 # 页面清单里记录了每页的实际输出 dpi；PNG 元数据缺失时用它兜底。
 MANIFEST_FILENAME = "page-dpi.json"
@@ -62,7 +74,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("project", type=Path, help="重建项目根目录")
     parser.add_argument("page", help="最终页面标识，例如 pages-013")
-    parser.add_argument("output", type=Path, help="输出 PNG 路径；必须放在 tmp/ 下")
+    parser.add_argument(
+        "output",
+        type=Path,
+        nargs="?",
+        help=(
+            "输出 PNG 路径；必须放在 tmp/ 下"
+            "（--overview/--show-budget/--reset-budget 时可省略）"
+        ),
+    )
     parser.add_argument("--band", metavar="I/N", help="把整页等分 N 条横带并取第 I 条")
     parser.add_argument(
         "--region",
@@ -76,6 +96,17 @@ def parse_args() -> argparse.Namespace:
         help=f"整页缩到 {DEFAULT_OVERVIEW_WIDTH} px 宽的定位用总览",
     )
     parser.add_argument("--json", action="store_true", help="输出机器可读结果")
+    parser.add_argument(
+        "--show-budget",
+        action="store_true",
+        help="只报告本页读图预算余额，不裁图",
+    )
+    parser.add_argument(
+        "--reset-budget",
+        type=int,
+        metavar="N",
+        help="由调度者显式提高本页预算上限（需说明原因），不裁图",
+    )
     return parser.parse_args()
 
 
@@ -152,6 +183,31 @@ def source_dpi(path: Path, width: int, height: int) -> float | None:
     return None
 
 
+def ensure_budget_available(project: Path, page: str) -> None:
+    """在产出裁图**之前**确认还有额度。
+
+    先写图再报错会留下"预算已用尽但图已生成"的矛盾状态，也让调用方误以为成功。
+    """
+    from read_budget import BudgetError as _BudgetError
+    from read_budget import load
+
+    payload = load(project)
+    limit = int(payload["limit"])
+    count = int((payload["pages"].get(page) or {}).get("count", 0))
+    if count >= limit:
+        raise _BudgetError(
+            f"{page} 的读图预算已用尽（{count}/{limit}）。\n"
+            "超预算不是更仔细，而是任务失败：请停下来用 BLOCKED 报告卡在哪一块，"
+            "不要继续裁图。确需更多额度时由调度者显式提高上限。"
+        )
+
+
+def reset_page_budget(project: Path, page: str, limit: int) -> None:
+    """由调度者显式提高某页预算上限。"""
+    from read_budget import set_limit
+    set_limit(project, page, limit)
+
+
 def main() -> int:
     args = parse_args()
     project = args.project.resolve()
@@ -165,8 +221,23 @@ def main() -> int:
         print("缺少 Pillow；先运行 pip install -r requirements.txt。", file=sys.stderr)
         return 2
 
+    # 预算的查看与调整不产出图片，因此不需要输出路径，也不该受位置校验约束。
+    if args.show_budget:
+        from read_budget import describe
+        print(describe(project, args.page))
+        return 0
+    if args.reset_budget is not None:
+        try:
+            reset_page_budget(project, args.page, args.reset_budget)
+        except (UsageError, BudgetError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        return 0
+
     try:
         source = resolve_page(project, args.page)
+        if args.output is None:
+            raise UsageError("缺少输出路径；只有 --overview/--show-budget/--reset-budget 可以省略。")
         output = check_output_location(project, args.output)
 
         selectors = [bool(args.band), bool(args.region), bool(args.overview)]
@@ -174,6 +245,9 @@ def main() -> int:
             raise UsageError("--overview、--band、--region 三者只能用一个。")
         if args.scale <= 0:
             raise UsageError("--scale 必须大于 0。")
+        # 额度不足要在写图前发现：--overview 不计入预算，因此跳过。
+        if not args.overview:
+            ensure_budget_available(project, args.page)
 
         x0, y0, x1, y1 = 0.0, 0.0, 1.0, 1.0
         mode = "full"
@@ -186,7 +260,7 @@ def main() -> int:
             mode = "band"
             index, total = parse_band(args.band)
             y0, y1 = (index - 1) / total, index / total
-    except UsageError as exc:
+    except (UsageError, BudgetError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
@@ -257,6 +331,34 @@ def main() -> int:
             f"注意: 长边 {max(out_width, out_height)} px 超过读取上限 "
             f"{READER_LONG_EDGE_HINT} px，读取时会被缩小，细节会再降一档；"
             "要看公式请用 --region 把宽度截得更窄。"
+        )
+
+    # 裁剪即计数：一张裁图就是一次读图。额度由脚本强制，不依赖自觉，因为实测
+    # 超预算（一页裁 20 多张）会把上下文烧光、任务中途崩溃，前面读的全白费。
+    if mode != "overview":
+        try:
+            charge_read(project, args.page, output)
+        except BudgetError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+
+    if mode in {"full", "band", "region"}:
+        tight: list[str] = []
+        if x0 > SAFE_X0:
+            tight.append(f"x0={x0:.2f} 偏内（安全值 {SAFE_X0}）")
+        if x1 < SAFE_X1:
+            tight.append(f"x1={x1:.2f} 偏内（安全值 {SAFE_X1}）")
+        if tight:
+            print(
+                "提示: "
+                + "；".join(tight)
+                + "。正文可能排到版心边沿，行首/行末的字有被切掉的风险；"
+                f"整幅横带建议用 --region {SAFE_X0},{y0:.2f},{SAFE_X1},{y1:.2f}。"
+            )
+    if args.scale > 1.0 and mode != "overview":
+        print(
+            "提示: --scale 大于 1 只是插值放大，不增加任何信息，只会多占上下文；"
+            "看不清请用 --region 收窄宽度，不要放大。"
         )
     return 0
 
