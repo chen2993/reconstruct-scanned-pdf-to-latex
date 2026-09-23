@@ -1,7 +1,7 @@
 # 类文件契约
 
 `.cls` 与构建入口必须满足的约定：所有权模型、唯一入口、计数器与视图、正交配置。
-逐页源码的编写规则见 [page-authoring.md](page-authoring.md)；分页与目录书签见 [pagination-and-navigation.md](pagination-and-navigation.md)；排版回归陷阱见 [latex-pitfalls.md](latex-pitfalls.md)。
+逐页源码的编写规则见 [page-authoring.md](page-authoring.md)；分页与目录书签见 [pagination-and-navigation.md](../practice/pagination-and-navigation.md)；排版回归陷阱见 [latex-pitfalls.md](../practice/latex-pitfalls.md)。
 
 ## 内容
 
@@ -22,7 +22,7 @@
 
 `template/base.cls` 只用于理解接口形状，不是项目模板、父类或视觉值来源。参考类的 `original` profile 不提供默认尺寸；项目类必须在导言区用设置器写入经人工确认的原书尺寸，且**所有目标（含完整书）都使用这个尺寸**。缺少尺寸时类文件在 `\begin{document}` 明确报错，不会悄悄退回引擎默认纸张。`a4`、`pad11`、`pad13` 只属于做题本选项，完整书不能传入这些 profile。
 
-目标配置的应用时机是一个已证实容易出错的点：模式、纸型和主题必须在导言区结束前应用（参考实现用 `\AtEndPreamble`），因为 `geometry` 的纸张尺寸只在导言区生效；放到 `\begin{document}` 之后不报错但会被静默忽略，使所有做题本退回默认纸张。详见 [latex-pitfalls.md](latex-pitfalls.md) 第 6 节。
+目标配置的应用时机是一个已证实容易出错的点：模式、纸型和主题必须在导言区结束前应用（参考实现用 `\AtEndPreamble`），因为 `geometry` 的纸张尺寸只在导言区生效；放到 `\begin{document}` 之后不报错但会被静默忽略，使所有做题本退回默认纸张。详见 [latex-pitfalls.md](../practice/latex-pitfalls.md) 第 6 节。
 
 自定义环境、命令、计数器、标签键和配置 API 必须使用英文 ASCII 标识符，只允许 ASCII 字母/数字和必要的下划线；不得使用中文、中文词组或连字符。标准 LaTeX 的带星号布局环境（如 `figure*`、`equation*`、`align*`）只作为既有布局环境使用，不能给自定义语义所有者加星号。中文可以作为正文、题注或角色显示文本的值，但不能成为任何 LaTeX 名称。连字符可以出现在文件名和页面标识中，但不能出现在这些 LaTeX 标识符中。
 
@@ -86,7 +86,7 @@
 - `latex/front/toc.tex` 必须只调用一次项目类文件提供的自动目录指令（固定参考接口为 `\bookmaketoc`）；目录条目、页码和缩进由 `.cls` 及 LaTeX 辅助文件生成；禁止在 `toc.tex` 或逐页源码中手写目录条目、页码或逐页 `\addcontentsline`。构建前运行 `scripts/audit_toc.py`。
 - `bookpart`、`bookchapter`、`booksection` 等结构命令必须由 `.cls` 自动写入目录并建立对应 PDF 书签；页面源码只提供标题语义，不手工写书签层级或页码。
 - 前后置模块在其实际第一页调用 `\bookbookmarkmodule{显示标题}{ascii_key}`（或项目等价接口）。参考接口先结束当前页、建立锚点再写入书签，因此每个模块的目标是其实际第一页；项目类若改写接口也必须保持这一契约。最终 PDF outline 必须覆盖**原书实际存在的每个前后置模块**（有献词就要有献词书签，没有就不该出现），键名只用英文 ASCII 标识符，目标位置由当前排版自动确定。模块清单以原件为准，不套用固定四键。
-- **目录内容与书签是两套独立集合**，不要假定“进书签就一定进目录”。每个模块和结构层级都要分别决定是否出现在印出来的目录、是否出现在 PDF 书签树里。常见组合是“只在书签、不进目录”（前言、末页这类）或“进目录但不进书签”（细节层级）。把决策集中记录在 `.cls` 或 API 文档里。排版实现见 [pagination-and-navigation.md](pagination-and-navigation.md)。
+- **目录内容与书签是两套独立集合**，不要假定“进书签就一定进目录”。每个模块和结构层级都要分别决定是否出现在印出来的目录、是否出现在 PDF 书签树里。常见组合是“只在书签、不进目录”（前言、末页这类）或“进目录但不进书签”（细节层级）。把决策集中记录在 `.cls` 或 API 文档里。排版实现见 [pagination-and-navigation.md](../practice/pagination-and-navigation.md)。
 - 每次构建至少运行两遍并检查 `.toc`、PDF outline 和内部链接收敛；书签缺失、重复、层级错误、顺序错误或指向空白页均阻止发布。原件没有对应模块时暂停并请求人工决定，不伪造内容或静默省略。
 
 正文逐页文件只保留一个最终页面标识注释，例如：

@@ -1,7 +1,7 @@
 # 逐页内容编写规则
 
 编写 `pages-xxx.tex` 与前后置模块时必须满足的约定：环境覆盖、合法嵌套、交叉引用、跨页对象与分批转写。
-`.cls` 与构建契约见 [class-contract.md](class-contract.md)；排版回归陷阱见 [latex-pitfalls.md](latex-pitfalls.md)。
+`.cls` 与构建契约见 [class-contract.md](class-contract.md)；排版回归陷阱见 [latex-pitfalls.md](../practice/latex-pitfalls.md)。
 
 ## 内容
 
@@ -86,6 +86,6 @@
 
 ## 5. 分批转写
 
-分批纪律、任务清单、跨页交接、收敛门和停工反馈流程统一见 [collaboration-and-baseline.md](collaboration-and-baseline.md)。
+分批纪律、任务清单、跨页交接、收敛门和停工反馈流程统一见 [collaboration-and-baseline.md](../governance/collaboration-and-baseline.md)。
 
 本节只记录**内容侧**的转写约束：一个逻辑对象可以跨文件流动，但转写单元不得为了对齐文件边界而增删环境边界（见上一节的跨页规则）；不得以临时字体、颜色、间距或最相近环境代替未登记的样式，发现缺口就停工上报。

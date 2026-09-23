@@ -26,13 +26,11 @@ description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译�
 - 页面拆分和旋转产生的中间文件只放临时目录，成功命名后清理；不保留中间页面副本、页面映射表或物理页记录。
 - 最终页面标识只有 `front-xxx`、`pages-xxx`、`back-xxx` 三类。需要保留视觉证据时使用同名 PNG；
   源码页面使用 `front/`、`pages/`、`back/` 下的 `.tex` 文件。
-- `latex/front/` 和 `latex/back/` 下的 `.tex` 文件必须按语义类型命名，例如 `cover.tex`、`dedication.tex`、`toc.tex`、`preface.tex`、`afterword.tex`、`references.tex`；
-  严禁 `front-001.tex`、`front_001.tex`、`back-001.tex`、`page-001.tex` 或任何页码式文件名。
-  页码只属于最终 PNG 标识和 `latex/pages/pages-xxx.tex` 正文文件。
+- 前后置模块按语义类型命名（`cover.tex`、`toc.tex` 等），正文逐页用 `pages-xxx.tex`；**页码式模块名（`front-001.tex`）一律禁止**。命名契约与例外见 [references/contract/class-contract.md](references/contract/class-contract.md)。
 - `.cls` 从空白文件按实际原件实现；`template/base.cls` 只是接口参考，不是父类或视觉模板。
-- 自定义 LaTeX 环境、命令、计数器、标签键和配置 API 的命名必须使用英文 ASCII 标识符，只允许字母、数字和必要的下划线，不得使用中文或连字符。
-  标准 LaTeX 的带星号布局环境（如 `figure*`、`equation*`、`align*`）可以照常使用，但不得给自定义语义所有者加星号；实现内部的 `@` 宏不属于页面语义 API。
-  中文只能出现在正文、题注、角色显示文本等值中；连字符只允许出现在文件名、页面标识、样式卡片 ID、路径和 Git 提交文本中。
+- 自定义环境、命令、计数器、标签键与配置 API **只能用英文 ASCII 标识符**（字母、数字、下划线）；不得用中文或连字符。
+  中文只能出现在正文、题注、角色显示文本等**值**里；连字符只允许出现在文件名、页面标识、样式卡片 ID、路径与 Git 提交文本中。
+  带星号布局环境（`figure*`、`align*`）按既有用法使用，但不得给自定义语义所有者加星号。完整契约见 [references/contract/class-contract.md](references/contract/class-contract.md)。
 - 所有显示编号由 `.cls` 计数器产生，逐页源码不得硬编码例题号、习题号、定义号、公式号、图表号或步骤号。
 - 目录和 PDF 书签必须由 `.cls` 集中管理：`latex/front/toc.tex` 只调用一次项目提供的 `\bookmaketoc` 自动目录指令，不得手写目录条目、页码或逐页 `\addcontentsline`；
   结构命令负责自动写入目录。
@@ -133,6 +131,28 @@ project/
 `template/` 中的 `base.cls` 与 `build.ps1` 是参考模板，与 `latex/assets/`（矢量资产）含义不同；
 实际项目的 `.cls` 写入 `latex/`，成品的 `build.ps1` 写入项目根目录。
 
+## 阶段总表
+
+14 个阶段各自的关键产物与"能否进下一步"的门槛。细节在各阶段正文与对应参考文档中。
+
+| 阶段 | 关键产物 | 进入下一阶段的条件 |
+|---|---|---|
+| 1 文件树 | 项目骨架、`progress.md` 输入审计 | 纸型证据已记录；来源不明时已请用户确认 |
+| 2 拆页 | `extracted/` 逐页 PNG + 清单 | 页数、像素、DPI、回退原因已核对 |
+| 3 修正 | `page-corrections.json` | 已**逐页看过**方向（即使无旋转也要跑一次） |
+| 4 命名 | `front-*.png`/`pages-*.png`、模块 `.tex`、`main.tex` | 证据页已显式舍去；临时工作区已清理 |
+| 5 样式卡片 | `style-cards.md` | 页面分型完成；用户已确认纸型 |
+| 6 样式实现 | `.cls`、`class-api.md`、`semantic-audit.json` | 每个新接口已编译验证；跨页环境已编译验证 |
+| 7 样式复核 | `reviews/style.md` | 达 90%、无语义/编号错误、无未关闭缺口；**人工已确认** |
+| 8 内容转写 | `pages-xxx.tex`（分批） | 每批：转写 → 复核 → 编译 → 验收；来源页标记齐全 |
+| 9 矢量图 | `pages/figures/figure-*.tex` | 每图独立编译通过 |
+| 10 图形复核 | `reviews/figures.md` | 达 90%；原书无的图号/引用已删除 |
+| 11 全书复核 | `reviews/book.md` | 抽查覆盖所有实际存在的类型；未用审计替代人工 |
+| 12 矩阵构建 | `build.ps1`、`dist/` | 所有目标通过编译、outline、成品审计；原子发布 |
+| 13 补充 | 新增模块 | 明确标为新增；未虚构原书书目事实 |
+| 13.5 瘦身 | README 文件树契约 | `latex/` 只剩 LaTeX 源码；无废弃文件 |
+| 14 最终复核 | `reviews/final.md` | 记录命令/页数/纸张/主题/已知差异；**人工已确认** |
+
 ## 工作流
 
 按顺序执行以下阶段。公共接口或样式发生变化时，先更新类文件、API、样式卡片和审计配置，再恢复受影响批次。
@@ -214,8 +234,8 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 ### 4.5 协作与并行纪律（跨阶段）
 
 并发只有建立在对齐基线上才可靠。角色边界、任务包六要素、图片读取纪律、并发节奏与收敛门见
-[references/subagent-orchestration.md](references/subagent-orchestration.md)；批次基线与不可逆操作保护见
-[references/collaboration-and-baseline.md](references/collaboration-and-baseline.md)。
+[references/governance/subagent-orchestration.md](references/governance/subagent-orchestration.md)；批次基线与不可逆操作保护见
+[references/governance/collaboration-and-baseline.md](references/governance/collaboration-and-baseline.md)。
 
 调度节奏用 `scripts/orchestrate.py` 固定下来：`plan` 切批 → `next` 生成任务包 → 单元转写 → `verify` 校验 → `checkpoint` 提交检查点 → 再 `next`。
 任务包自带样式摘要版本、文件白名单、逐页分型、跨页交接和停工反馈格式；在飞批次数达到并发上限时 `next` 会排队而不是继续派发（`plan --concurrency` 设定上限），`checkpoint` 只提交通过校验的批次。
@@ -224,7 +244,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 ### 4.6 能力预检（开工前）
 
-开始转写前必须先确认运行环境具备**原生多模态读取**与**任务分派**两项能力，并把结论写进 `progress.md`。任一缺失时立即停下来告知用户（缺哪一项、卡在哪一页），按单执行者串行或请用户切换模型，禁止改用 OCR 或 PDF 文本层替代。判据与处理方式见 [references/subagent-orchestration.md](references/subagent-orchestration.md) 第 0 节。
+开始转写前必须先确认运行环境具备**原生多模态读取**与**任务分派**两项能力，并把结论写进 `progress.md`。任一缺失时立即停下来告知用户（缺哪一项、卡在哪一页），按单执行者串行或请用户切换模型，禁止改用 OCR 或 PDF 文本层替代。判据与处理方式见 [references/governance/subagent-orchestration.md](references/governance/subagent-orchestration.md) 第 0 节。
 
 ### 5. 样式总结与样式卡片
 
@@ -240,7 +260,9 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 ### 6. 样式实现
 
-阅读 [references/style-cards.md](references/style-cards.md)、[references/class-contract.md](references/class-contract.md)、[references/latex-pitfalls.md](references/latex-pitfalls.md) 和 [template/base.cls](template/base.cls)，在 `latex/` 从零实现项目 `.cls`，并同步填写 `docs/class-api.md` 与 `semantic-audit.json`。
+阅读 [style-cards.md](references/practice/style-cards.md)、[class-contract.md](references/contract/class-contract.md)、
+[latex-pitfalls.md](references/practice/latex-pitfalls.md) 和 [template/base.cls](template/base.cls)，
+在 `latex/` 从零实现项目 `.cls`，并同步填写 `docs/class-api.md` 与 `semantic-audit.json`。
 集中管理纸张、版心、字体、间距、页眉页脚、颜色、环境、计数器、内容视图、题目归属、跨页接口和媒体接口。
 每新增一个公共接口，先在 API 文档中锁定输入、输出、错误行为和命名契约，再实现并进行常规编译复核；环境、命令、计数器和标签键先通过英文 ASCII 标识检查。
 每个登记为可跨页的环境都要以单条 `\bookinput` 连续加载两个或更多页面的夹具验证单一 `\begin`/`\end`，并在完整书与隐藏视图各编译一次。
@@ -258,7 +280,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 表、跨页表格、思维导图等整类问题统一处理，不在单页打补丁。发现的问题清单和收敛过程记入 `reviews/`。
 
 目录与页眉页脚是这一阶段单独收敛的一类：目录的页码字号要统一、页码盒宽要给够、章级条目要有足够左缩进、点引线间距统一、续页带页眉页码且条目可点击跳转；页眉页脚全书几何一致。
-实现细节见 [references/pagination-and-navigation.md](references/pagination-and-navigation.md)。
+实现细节见 [references/practice/pagination-and-navigation.md](references/practice/pagination-and-navigation.md)。
 
 ### 8. 内容按页实现
 
@@ -278,7 +300,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 页面通过类文件提供的集中接口嵌入图形主体（参考 `\bookfiguremodule{figure-pages-023-001}`），不在页面源码里写 `\input{...}` 路径；
 缺失或重复的主体由类文件报错。
 
-先分清图的两类，再选手段，详见 [references/figures-and-assets.md](references/figures-and-assets.md)：结构图（思维导图、知识结构网络图、流程图、框图、数轴、阴影区域、花括号分层）用可编译的 TikZ 重建并保留原书层级；
+先分清图的两类，再选手段，详见 [references/practice/figures-and-assets.md](references/practice/figures-and-assets.md)：结构图（思维导图、知识结构网络图、流程图、框图、数轴、阴影区域、花括号分层）用可编译的 TikZ 重建并保留原书层级；
 书法题字、校名、印章、手写签名这类**字形本身即内容**的元素，从原件最高分辨率页描摹成矢量轮廓，保留字形骨架与字距，不要用相近字体代替。资产放独立目录，尺寸/颜色/位置由 `.cls` 宏集中管理；
 描摹脚本属于可复现源码，必须保留。
 
@@ -295,12 +317,12 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 抽查封面、目录、章节边界、普通正文、公式密集页、树/流程/框图/时序图、表格、参考文献/索引、封底或其他书末页、奇偶页、前后置页和批次边界；
 出版/印刷信息页只核对已记录的纸张证据，不作为输出页抽样，除非它是含独有内容的混合页。只抽查原件实际存在的类型。记录最终页面标识与成品目标名的对应关系，不能用审计替代人工视觉检查。
 
-页数与原书有明显差异时按 [references/pagination-and-navigation.md](references/pagination-and-navigation.md) 诊断：先建章节锚点定位到章，再用 `scripts/audit_page_density.py` 缩小到少数稀疏候选页，逐页归因（不可分页的语义块、浮动体阈值、环境边界额外垂直胶、行内公式被写成行间公式）后只改机制，不做全局压缩。
+页数与原书有明显差异时按 [references/practice/pagination-and-navigation.md](references/practice/pagination-and-navigation.md) 诊断：先建章节锚点定位到章，再用 `scripts/audit_page_density.py` 缩小到少数稀疏候选页，逐页归因（不可分页的语义块、浮动体阈值、环境边界额外垂直胶、行内公式被写成行间公式）后只改机制，不做全局压缩。
 空白多的页不等于错误，必须与同印刷页比对；用户已说明不必追求页数一致时，按可读性和分页结构一致性验收。
 
 ### 12. 编译测试与做题本矩阵
 
-按 [references/workbook-matrix.md](references/workbook-matrix.md) 和 [template/build.ps1](template/build.ps1) 实现根目录 `build.ps1`。
+按 [references/contract/workbook-matrix.md](references/contract/workbook-matrix.md) 和 [template/build.ps1](template/build.ps1) 实现根目录 `build.ps1`。
 每个目标生成独立 driver，只定义 `\BookBuildOptions` 并输入同一个 `latex/main.tex`，不得再创建 `main-workbook.tex`。
 完整书只构建用户确认的原书尺寸；仅当原件和用户选择都包含相应题型时，才构建例题、习题或全做题本，不为没有题目的教材生成空目标。
 题目目标可分别构建 `original`、`a4`、`pad11`、`pad13`，主题集合由用户确认：默认矩阵只固定 `print` 与护眼黄 `eyecare`，不要把额外主题（例如深色）当成默认交付；
@@ -338,27 +360,69 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 ## 参考资料
 
-- [references/style-cards.md](references/style-cards.md)：样式卡片字段和代表页选择规则。
-- [references/class-contract.md](references/class-contract.md)：`.cls`、唯一入口、所有者树、计数器与视图、正交配置。
-- [references/page-authoring.md](references/page-authoring.md)：逐页源码的环境覆盖、合法嵌套、交叉引用、跨页对象与分批转写。
-- [references/latex-pitfalls.md](references/latex-pitfalls.md)：字体字距、分页节奏、页眉页脚、图形绘制和警告分类等回归陷阱。
-- [references/workbook-matrix.md](references/workbook-matrix.md)：原书、做题本纸张/主题/范围矩阵及版面约束。
-- [references/review-checklist.md](references/review-checklist.md)：结构、编译、视觉和人工复核门槛。
-- [references/git-workflow.md](references/git-workflow.md)：检查点、并行协作和提交消息格式。
-- [references/collaboration-and-baseline.md](references/collaboration-and-baseline.md)：多单元并行的批次纪律、任务清单、收敛门与不可逆操作保护。
-- [references/subagent-orchestration.md](references/subagent-orchestration.md)：能力预检、调度者与执行单元的职责边界、任务包六要素、并发节奏、交接与恢复。
-- [references/figures-and-assets.md](references/figures-and-assets.md)：结构图 TikZ 重建、书法题字矢量描摹、资产组织与逐图收敛。
-- [references/pagination-and-navigation.md](references/pagination-and-navigation.md)：页数漂移的定位与归因、目录排版的内部约定、PDF 书签规则。
-- `scripts/audit_toc.py`：目录模块与自动目录指令的静态审计。
-- `scripts/audit_provenance.py`：正文来源页标记（每页恰好一个、与文件名一致、严格递增）与前后置模块来源页覆盖（每模块一条以上、分区一致、无重叠、模块内递增）的静态审计。
-- `scripts/audit_semantics.py`：语义所有权、跨页环境结构与集中职责归属（硬编码命令）的静态审计。
-- `scripts/audit_pdf_outline.py`：按项目登记的前后置模块清单审计 PDF 顶层书签、顺序与非空目标页。
-- `scripts/audit_page_density.py`：按墨迹密度筛查异常稀疏页，帮助定位分页漂移；只做诊断，不判定对错。
-- `scripts/audit_pdf_build.py`：成品 PDF 的对象层审计；整页位图包装和做题本答案哨兵泄漏判为硬失败。
+`references/` 分三层：**契约层**是动手前必须知道的约定，**手法层**是做的时候查的操作规则，**治理层**是协作与验收。按当前阶段取用即可，不必全读。
+
+### 阶段 → 文档
+
+| 阶段 | 该读的文档 |
+|---|---|
+| 1-4 输入审计、拆页、修正、命名 | [practice/page-reading.md](references/practice/page-reading.md)、[contract/workbook-matrix.md](references/contract/workbook-matrix.md) |
+| 5 样式卡片 | [practice/style-cards.md](references/practice/style-cards.md) |
+| 6 样式实现 | [contract/class-contract.md](references/contract/class-contract.md)、[practice/latex-pitfalls.md](references/practice/latex-pitfalls.md)、[template/base.cls](template/base.cls) |
+| 7 样式复核 | [practice/latex-pitfalls.md](references/practice/latex-pitfalls.md)、[governance/review-checklist.md](references/governance/review-checklist.md) |
+| 8 逐页转写 | [practice/page-reading.md](references/practice/page-reading.md)、[contract/page-authoring.md](references/contract/page-authoring.md) |
+| 9-10 矢量图 | [practice/figures-and-assets.md](references/practice/figures-and-assets.md) |
+| 11 全书复核 | [practice/pagination-and-navigation.md](references/practice/pagination-and-navigation.md)、[governance/review-checklist.md](references/governance/review-checklist.md) |
+| 12 矩阵构建 | [contract/workbook-matrix.md](references/contract/workbook-matrix.md) |
+| 并行协作（跨阶段） | [governance/subagent-orchestration.md](references/governance/subagent-orchestration.md)、[governance/collaboration-and-baseline.md](references/governance/collaboration-and-baseline.md) |
+| Git 检查点 | [governance/git-workflow.md](references/governance/git-workflow.md) |
+
+### 契约层 `references/contract/`
+
+- [class-contract.md](references/contract/class-contract.md)：`.cls`、唯一入口、所有者树、计数器与视图、正交配置。
+- [page-authoring.md](references/contract/page-authoring.md)：逐页源码的环境覆盖、合法嵌套、交叉引用、跨页对象、照录原书。
+- [workbook-matrix.md](references/contract/workbook-matrix.md)：原书与做题本的纸张/主题/范围矩阵、纸型单一事实源。
+
+### 手法层 `references/practice/`
+
+- [page-reading.md](references/practice/page-reading.md)：读页面的方式——宽度决定清晰度、读图预算、图文错配防护、视觉能力自检。
+- [style-cards.md](references/practice/style-cards.md)：样式卡片字段和代表页选择规则。
+- [figures-and-assets.md](references/practice/figures-and-assets.md)：矢量图重建策略（含函数图、3D 图、树图）、书法题字描摹、资产组织与逐图收敛。
+- [pagination-and-navigation.md](references/practice/pagination-and-navigation.md)：页数漂移的定位与归因、目录排版约定、PDF 书签规则。
+- [latex-pitfalls.md](references/practice/latex-pitfalls.md)：字体字距、分页节奏、页眉页脚、图形绘制、公式编号、警告分类等回归陷阱。
+
+### 治理层 `references/governance/`
+
+- [subagent-orchestration.md](references/governance/subagent-orchestration.md)：能力预检、调度者与执行单元的职责边界、任务包、车道、并发节奏。
+- [collaboration-and-baseline.md](references/governance/collaboration-and-baseline.md)：基线冻结、批次纪律、收敛门与不可逆操作保护。
+- [review-checklist.md](references/governance/review-checklist.md)：结构、编译、视觉和人工复核门槛。
+- [git-workflow.md](references/governance/git-workflow.md)：检查点、提交消息格式。
+
+### 脚本
+
+**输入审计与页面处理**
+
+- `scripts/init_project.py`：创建项目骨架，并把技能的 `scripts/`、`template/` 复制进项目。
+- `scripts/split_pdf.py`：按页拆出 PNG，优先直取整页嵌入图，不重采样。
+- `scripts/correct_pages.py`：按 `page-corrections.json` 应用 0/90/180/270 旋转。
+- `scripts/renumber_pages.py`：舍去证据页、命名最终页面、生成入口骨架与语义模块。
+- `scripts/crop_page.py`：单页取图（`--overview` 总览 / `--band` 横带 / `--region` 区域），报告输出尺寸与等效 dpi，裁剪即计入读图预算，只允许写 `tmp/`。
+- `scripts/read_budget.py`：每页读图预算的账本与只读报告（`check`/`report`）。
 - `scripts/page_workspace.py`：拆页临时工作区（`extracted/`）路径解析。
-- `scripts/crop_page.py`：单页取图工具（`--overview` 总览 / `--band` 横带 / `--region` 区域），报告输出尺寸与等效 dpi，裁图只允许写 `tmp/`；裁剪即计入每页读图预算。
-- `scripts/read_budget.py`：每页读图预算的账本与只读报告（`check`/`report`）；预算由 `crop_page.py` 强制，超限拒绝裁剪。
-- `scripts/build_profiles.py`：纸型尺寸的单一事实源；`.cls` 与成品审计都读它，避免两边各写一套。原书尺寸由项目在 `profile-overrides.json` 里登记。
+- `scripts/pdf_backend.py`：PyMuPDF 的单一导入入口（所有脚本共用，避免各自写 fallback）。
+
+**质量门**
+
+- `scripts/audit_toc.py`：目录模块与自动目录指令的静态审计。
+- `scripts/audit_provenance.py`：正文来源页标记与前后置模块覆盖的静态审计。
+- `scripts/audit_semantics.py`：语义所有权、跨页环境结构与集中职责归属的静态审计。
+- `scripts/audit_pdf_outline.py`：按项目登记的前后置模块清单审计 PDF 顶层书签、顺序与非空目标页。
+- `scripts/audit_pdf_build.py`：成品 PDF 对象层审计；整页位图、答案哨兵泄漏与逐页纸型核对。
+- `scripts/audit_page_density.py`：按墨迹密度筛查异常稀疏页，帮助定位分页漂移；只做诊断。
+- `scripts/build_profiles.py`：纸型尺寸的单一事实源，`.cls` 与成品审计共用。
+
+**调度**
+
 - `scripts/orchestrate.py`：调度批次、生成单元任务包、校验批次产出并提交 Git 检查点（`plan`/`next`/`verify`/`checkpoint`/`status`）。
 
 开发期工具（不属于重建流程，仅维护本技能时使用）：
