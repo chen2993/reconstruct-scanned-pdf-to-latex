@@ -249,7 +249,9 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 实测出现过**能力倒置**：主执行者调 `read_image` 返回「不支持视觉」，而派出的子代理能正常读图。此时**所有视觉工作（方向检查、页面分型、样式提取、转写、复核）都必须委托出去**，主执行者只做调度与验收。另外，派出的**下二级**代理可能被固定在无视觉路径上——不要让二级代理代读图片，那只会浪费往返。
 
-任一层都读不了图时，立即停下来告知用户（缺哪一项、卡在哪一页），请用户切换模型；禁止改用 OCR 或 PDF 文本层替代。判据与处理方式见 [subagent-orchestration.md](references/governance/subagent-orchestration.md) 第 0 节与 [dispatch-prompts.md](references/governance/dispatch-prompts.md) 第 0 节。
+**先探针、再派发**：用 `tools/make_vision_probe.py` 生成一张内容已知的合成图（3 圆 / 2 三角 / 4 方 / 左上角 `V7K`），让待测方只回答一行可自动核对的结果；看不到就回「看不到」。这样能区分"看不到"与"看错"两种失败，比直接派真任务便宜得多——实测 528 次派发里有 441 次带探针。
+
+任一层都读不了图时，立即停下来告知用户（缺哪一项、卡在哪一页），请用户切换模型；禁止改用 OCR 或 PDF 文本层替代。判据、探针写法与单元提示词结构见 [subagent-orchestration.md](references/governance/subagent-orchestration.md) 第 0 节与 [dispatch-prompts.md](references/governance/dispatch-prompts.md) 第 0–0.7 节。
 
 ### 5. 样式总结与样式卡片
 
@@ -461,5 +463,6 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 - `tools/deploy_skill.py`：把本仓库以目录联接部署到本机运行时的技能目录，默认覆盖 4 个主用运行时（Codex `~/.codex/skills`、Claude Code `~/.claude/skills`、DSH `~/.dsh/skills`、Kimi Code `~/.kimi-code/skills`）。`--status` 查看现状，`--force` 把过期实体副本归档后改为联接，`--all` 或 `--only` 处理其它已安装工具，`--remove` 只移除联接。联接保证"改仓库即改技能"，不会出现副本漂移。
 - `tools/make_fixture_pdf.py`：生成无文字层的演练用图片型 PDF。
+- `tools/make_vision_probe.py`：生成内容已知的视觉能力探针图，用于在派发前确认某条路线能否读图。
 
 回归测试在 `tests/`，其中 `tests/mutation_check.py` 会临时注入已知缺陷以确认测试确实能捕获它们。
