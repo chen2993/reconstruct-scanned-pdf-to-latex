@@ -36,9 +36,10 @@ description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译�
 - 所有显示编号由 `.cls` 计数器产生，逐页源码不得硬编码例题号、习题号、定义号、公式号、图表号或步骤号。
 - 目录和 PDF 书签必须由 `.cls` 集中管理：`latex/front/toc.tex` 只调用一次项目提供的 `\bookmaketoc` 自动目录指令，不得手写目录条目、页码或逐页 `\addcontentsline`；
   结构命令负责自动写入目录。
-- 最终 PDF 书签至少必须有封面、前言、献词和书末页四个顶层节点，并指向对应模块的实际第一页；
-  前后置模块使用项目提供的书签指令（参考 `\bookbookmarkmodule{显示标题}{ascii_key}`，参考接口会先开始新页），不得手写物理页码或复制页面。
-  若原件确实缺少其中一项，必须暂停请人工决定，不能伪造空内容或静默省略。
+- 前后置模块的书签以**原书实际拥有的模块**为准，不是固定清单：封面、前言、献词、目录、书末页等只要原件里有，就**必须**提取出来并各自成为顶层书签，指向该模块的实际第一页；
+  原件没有的模块不得凭空补书签，也不得为了凑齐某种"标准结构"而伪造空内容。
+  每个存在的模块都使用项目提供的书签指令（参考 `\bookbookmarkmodule{显示标题}{ascii_key}`，参考接口会先开始新页），不得手写物理页码或复制页面。
+  模块是否存在拿不准时（例如原件缺封面、缺献词、或某一页是否属于前言），暂停请人工决定，不能静默省略。
 - 每个可见块有且只有一个直接语义所有者。所有者可以按原件语义受控嵌套，例如题目包含答案、答案包含步骤；父级隐藏时子级不得单独出现。普通正文、列表、引文、脚注、公式、表格和媒体也必须落在已登记所有者内。
 - 跨页语义对象只使用一组 `\begin{environment}` 与 `\end{environment}`，可以跨越同一 `\bookinput` 连续加载的 `pages-xxx.tex` 文件；
   禁止将同一对象拆成多个公开片段接口。源文件边界不是 TeX 分组，也不应自动插入分页。编号、标签、锚点和标题只在 `\begin` 初始化；终止行为（包括做题本唯一答题区）只在 `\end` 执行。
@@ -294,12 +295,14 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 编译退出码之外还要用 `scripts/audit_pdf_build.py` 审计所有 PDF 页的存在、页数/MediaBox、空文字页、整页位图包装和做题本答案泄漏，并检查书签/链接与日志收敛、分类处理盒警告。做题本目标必须随构建提供答案哨兵清单（`-AnswerSentinels`），缺清单即构建失败。所有目标通过后才原子发布到 `dist/`。
 参考构建脚本的 `matrix` 目标为用户确认的主题集合生成完整书目标（默认 `print`/`eyecare`，项目实现了其它主题时用 `-Themes` 传入完整集合并必须保留 `print`），做题本范围必须通过 `-Scope` 显式传入实际存在的 `examples`、`exercises` 或 `all`；
 省略时不生成做题本。单目标 `workbook` 只接受一个范围，不能靠脚本猜测原件是否有题目。
-构建验收还必须检查 PDF outline：至少存在封面、前言、献词和书末页四个顶层书签，目录通过 `\bookmaketoc` 自动生成；
+构建验收还必须检查 PDF outline：**原件实际存在的每个前后置模块都要有一条顶层书签**（有献词就必须有献词书签，没有献词就不该出现），并按原件顺序排列、指向非空目标页；目录通过 `\bookmaketoc` 自动生成；
 目录页码和书签目标只能由 LaTeX 在收敛构建中计算，不能硬编码。
 参考构建脚本先调用 `scripts/audit_toc.py`，强制 `toc.tex` 恰好一次 `\bookmaketoc`、禁止手写目录命令且要求入口恰好导入一次目录模块；
-再调用 `scripts/audit_pdf_outline.py` 检查 outline 层级、四个固定目标页的非空渲染和辅助文件。
+再调用 `scripts/audit_pdf_outline.py` 检查 outline 层级、已登记模块的书签顺序与非空目标页，以及辅助文件。
 这些脚本只读取源码、书签层级、目标页、页面渲染和辅助文件，不读取 PDF 正文文字。
-双语或定制显示文本只能通过 `-RequiredBookmarks cover=... preface=... dedication=... backmatter=...` 配置，四个固定语义键不可删除、替换或减少。
+前后置模块清单通过 `-RequiredBookmarks` 传入，格式为 `key=显示标题`、按原件顺序排列（例如原件有封面、前言、目录、书末页时传 `cover=封面,preface=前言,toc=目录,backmatter=书末页`）。
+  它是**项目自己的模块清单**，不是固定四键：原件有的模块必须登记（漏登记等于漏提取），原件没有的不要登记。
+  双语或定制显示文本只改等号右侧标题，不改左侧语义键。
 
 ### 13. 补充
 
@@ -332,7 +335,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - `scripts/audit_toc.py`：目录模块与自动目录指令的静态审计。
 - `scripts/audit_provenance.py`：正文来源页标记（每页恰好一个、与文件名一致、严格递增）的静态审计。
 - `scripts/audit_semantics.py`：语义所有权、跨页环境结构与集中职责归属（硬编码命令）的静态审计。
-- `scripts/audit_pdf_outline.py`：固定四类 PDF 顶层书签与 outline 结构审计。
+- `scripts/audit_pdf_outline.py`：按项目登记的前后置模块清单审计 PDF 顶层书签、顺序与非空目标页。
 - `scripts/audit_page_density.py`：按墨迹密度筛查异常稀疏页，帮助定位分页漂移；只做诊断，不判定对错。
 - `scripts/audit_pdf_build.py`：成品 PDF 的对象层审计；整页位图包装和做题本答案哨兵泄漏判为硬失败。
 - `scripts/page_workspace.py`：拆页临时工作区（`extracted/`）路径解析。

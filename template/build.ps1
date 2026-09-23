@@ -15,6 +15,9 @@ param(
     # 主题集合由用户按项目实际实现的主题确认；参考默认只包含完整书基线所需的
     # print/eyecare。项目实现了别的主题（例如深色）时才追加，不预先假定。
     [string[]]$Themes = @('print', 'eyecare'),
+    # 前后置模块按原书实际存在的情况登记，不是固定清单：原件有献词就必须登记
+    # 献词，没有就不该出现献词书签。默认值只是常见组合的参考，项目必须按自己的
+    # 模块清单传入 `-RequiredBookmarks`。顺序即原件的模块顺序。
     [string[]]$RequiredBookmarks = @('cover=封面', 'preface=前言', 'dedication=献词', 'backmatter=书末页'),
     # 做题本目标必须提供答案哨兵文件：答案的位置和长度无法靠目视抽查保证，
     # 只能在构建时逐页比对。每行一条哨兵文本，`#` 开头为注释。
@@ -92,25 +95,29 @@ if ($Target -ne 'matrix' -and $themeSet -notcontains $Theme) {
 $bookmarkEntries = @($RequiredBookmarks | ForEach-Object {
     $_ -split ',' | ForEach-Object { $_.Trim() }
 } | Where-Object { $_ })
-if ($bookmarkEntries.Count -ne 4) {
-    throw 'RequiredBookmarks 必须完整提供 cover=、preface=、dedication=、backmatter= 四个语义键。'
+if ($bookmarkEntries.Count -lt 1) {
+    throw 'RequiredBookmarks 至少需要一个模块；请按原书实际存在的前后置模块登记。'
 }
-$requiredKeys = @('cover', 'preface', 'dedication', 'backmatter')
 $providedKeys = @()
 $providedTitles = @()
 foreach ($entry in $bookmarkEntries) {
     $parts = $entry -split '=', 2
     if ($parts.Count -ne 2 -or [string]::IsNullOrWhiteSpace($parts[0]) -or
         [string]::IsNullOrWhiteSpace($parts[1])) {
-        throw "RequiredBookmarks 映射无效: $entry"
+        throw "RequiredBookmarks 映射无效: $entry；应为 KEY=TITLE。"
     }
-    $providedKeys += $parts[0].Trim()
+    $key = $parts[0].Trim()
+    if ($key -notmatch '^[a-z][a-z0-9_]*$') {
+        throw "RequiredBookmarks 的语义键必须是英文 ASCII 标识符: $key"
+    }
+    $providedKeys += $key
     $providedTitles += $parts[1].Trim()
 }
-if (@($providedKeys | Select-Object -Unique).Count -ne 4 -or
-    (@($providedKeys | Where-Object { $_ -notin $requiredKeys })).Count -gt 0 -or
-    (@($providedTitles | Select-Object -Unique).Count -ne 4)) {
-    throw 'RequiredBookmarks 必须恰好包含四个不重复的固定语义键和显示标题。'
+if (@($providedKeys | Select-Object -Unique).Count -ne $providedKeys.Count) {
+    throw "RequiredBookmarks 的语义键重复: $($providedKeys -join ', ')"
+}
+if (@($providedTitles | Select-Object -Unique).Count -ne $providedTitles.Count) {
+    throw "RequiredBookmarks 的显示标题重复: $($providedTitles -join ', ')"
 }
 
 function New-Job([string]$Kind, [string]$JobName, [string]$ScopeName,
@@ -189,7 +196,7 @@ function Assert-Pdf([string]$Pdf, [string]$Log, [string]$JobName) {
     }
     & python '-X' 'utf8' $outlineScript $Pdf '--required-map' @bookmarkEntries
     if ($LASTEXITCODE -ne 0) {
-        throw "PDF outline 未通过必需书签检查: $JobName"
+        throw "PDF outline 未通过模块书签检查: $JobName"
     }
     if (-not $SkipVisualCheck) {
         $probe = Join-Path (Split-Path -Parent $Pdf) 'visual-probe'

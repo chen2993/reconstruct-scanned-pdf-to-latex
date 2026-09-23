@@ -1,55 +1,67 @@
 #!/usr/bin/env python3
-"""Validate PDF outline and target-page rendering without reading page text."""
+"""Validate PDF outline and target-page rendering without reading page text.
+
+前后置模块不是固定清单：以原书实际拥有的模块为准。本脚本校验的是"项目声明的
+模块都真实出现、顺序正确、目标页非空"，而不是强求四个特定书签。原件没有献词
+就不该有献词书签；原件有的模块则必须有书签，不能静默漏掉。
+"""
 
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pdf_backend import require_pymupdf  # noqa: E402
 
-SEMANTIC_KEYS = ("cover", "preface", "dedication", "backmatter")
-DEFAULT_REQUIRED_MAP = (
+# 常见的前后置模块及其默认显示标题，供项目按原件取舍；不是强制清单。
+REFERENCE_BOOKMARK_MAP = (
     "cover=封面",
     "preface=前言",
     "dedication=献词",
     "backmatter=书末页",
 )
+# 语义键是 ASCII 标识符，与页面源码里的 key 参数一致。
+KEY_PATTERN = re.compile(r"[a-z][a-z0-9_]*")
 
 
-def parse_required_map(entries: list[str]) -> dict[str, str]:
-    """Parse the fixed four semantic keys and their visible titles."""
+def parse_required_map(entries: list[str]) -> list[tuple[str, str]]:
+    """Parse ``key=title`` entries into an ordered list.
 
-    if len(entries) != len(SEMANTIC_KEYS):
+    顺序有意义：它与原件的模块顺序一致，用于校验书签树的先后关系。
+    """
+
+    if not entries:
         raise ValueError(
-            "必须为 cover、preface、dedication、backmatter 各提供一个标题。"
+            "至少需要一个模块书签（例如 cover=封面）；请按原书实际存在的模块登记。"
         )
-    mapping: dict[str, str] = {}
+    pairs: list[tuple[str, str]] = []
     for entry in entries:
         key, separator, title = entry.partition("=")
-        key = key.strip()
-        title = title.strip()
-        if not separator or key not in SEMANTIC_KEYS or not title:
-            raise ValueError(f"书签映射无效: {entry!r}")
-        if key in mapping:
-            raise ValueError(f"书签语义键重复: {key}")
-        mapping[key] = title
-    if set(mapping) != set(SEMANTIC_KEYS):
-        raise ValueError("书签映射必须完整包含四个固定语义键。")
-    if len(set(mapping.values())) != len(mapping):
-        raise ValueError("四个书签显示标题不能重复。")
-    return mapping
+        key, title = key.strip(), title.strip()
+        if not separator or not key or not title:
+            raise ValueError(f"书签映射无效: {entry!r}；应为 KEY=TITLE。")
+        if KEY_PATTERN.fullmatch(key) is None:
+            raise ValueError(f"书签语义键必须是英文 ASCII 标识符: {key!r}")
+        pairs.append((key, title))
+    keys = [key for key, _ in pairs]
+    titles = [title for _, title in pairs]
+    if len(set(keys)) != len(keys):
+        raise ValueError(f"书签语义键重复: {keys}")
+    if len(set(titles)) != len(titles):
+        raise ValueError(f"书签显示标题重复: {titles}")
+    return pairs
 
 
 def validate_outline(
-    outline: object, page_count: int, required: dict[str, str]
+    outline: object, page_count: int, required: list[tuple[str, str]]
 ) -> tuple[dict[str, list[int]], list[str]]:
     """Validate outline structure while touching metadata only.
 
     PyMuPDF returns ``[level, title, page]`` records for ``get_toc``.  Keep
-    every required title as a list so duplicate top-level entries cannot be
+    every declared title as a list so duplicate top-level entries cannot be
     hidden by a dictionary overwrite.
     """
 
@@ -83,25 +95,29 @@ def validate_outline(
     if outline and isinstance(outline[0], (list, tuple)) and outline[0] and outline[0][0] != 1:
         errors.append("PDF outline 必须从顶层书签开始。")
 
-    for title in required.values():
+    for _, title in required:
         targets = top_level.get(title, [])
         if not targets:
             errors.append(f"缺少顶层书签: {title}")
         elif len(targets) > 1:
             errors.append(f"顶层书签重复: {title}")
 
-    required_pages = [top_level[required[key]][0] for key in SEMANTIC_KEYS if required[key] in top_level]
-    if len(required_pages) == len(SEMANTIC_KEYS):
-        if len(set(required_pages)) != len(required_pages):
-            errors.append("四个必需模块的书签不能指向同一页。")
-        if required_pages != sorted(required_pages):
-            errors.append("四个必需模块的书签顺序必须为封面、前言、献词、书末页。")
+    declared_titles = [title for _, title in required]
+    pages = [top_level[title][0] for title in declared_titles if title in top_level]
+    if len(pages) == len(declared_titles):
+        if len(set(pages)) != len(pages):
+            errors.append("已登记模块的书签不能指向同一页。")
+        if pages != sorted(pages):
+            errors.append(
+                "已登记模块的书签顺序必须与登记顺序一致："
+                + "、".join(declared_titles)
+            )
 
     return top_level, errors
 
 
 def target_pages_are_nonblank(document: object, pages: list[int]) -> list[int]:
-    """Render only required target pages and reject completely blank pages."""
+    """Render only the declared target pages and reject completely blank pages."""
 
     fitz = require_pymupdf()
 
@@ -122,9 +138,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--required-map",
         nargs="+",
-        default=list(DEFAULT_REQUIRED_MAP),
+        default=list(REFERENCE_BOOKMARK_MAP),
         metavar="KEY=TITLE",
-        help="四个固定语义键及其 PDF 书签显示标题",
+        help=(
+            "本项目实际存在的前后置模块及其书签显示标题，按原件顺序给出；"
+            "默认只是常见组合的参考，应替换为原书真实拥有的模块"
+        ),
     )
     return parser.parse_args()
 
@@ -148,11 +167,11 @@ def main() -> int:
             page_count = document.page_count
             top_level, errors = validate_outline(outline, page_count, required)
             if not errors:
-                pages = [top_level[required[key]][0] for key in SEMANTIC_KEYS]
+                pages = [top_level[title][0] for _, title in required]
                 blank_pages = target_pages_are_nonblank(document, pages)
                 if blank_pages:
                     errors.append(
-                        "必需书签指向空白页: "
+                        "已登记模块的书签指向空白页: "
                         + ", ".join(str(page) for page in blank_pages)
                     )
     except Exception as exc:  # PyMuPDF exposes several document-specific errors.
@@ -167,8 +186,7 @@ def main() -> int:
     print(
         "PDF outline 通过："
         + ", ".join(
-            f"{key}={title} -> {top_level[title][0]}"
-            for key, title in required.items()
+            f"{key}={title} -> {top_level[title][0]}" for key, title in required
         )
     )
     return 0
