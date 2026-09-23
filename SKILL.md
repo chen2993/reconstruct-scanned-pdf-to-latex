@@ -152,6 +152,7 @@ project/
 | 13 补充 | 新增模块 | 明确标为新增；未虚构原书书目事实 |
 | 13.5 瘦身 | README 文件树契约 | `latex/` 只剩 LaTeX 源码；无废弃文件 |
 | 14 最终复核 | `reviews/final.md` | 记录命令/页数/纸张/主题/已知差异；**人工已确认** |
+| 15 发布与开源（可选） | `.gitignore`、`LICENSE`、`NOTICE.md`、`README`、发布包 | 泄漏审计通过；**是否开源已由人类明确回答** |
 
 ## 工作流
 
@@ -358,6 +359,26 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 重新运行所需矩阵，抽查首尾页、章节、公式、图形、随机页面和三类做题本；更新 `reviews/final.md`，记录命令、页数、纸张尺寸、主题、已知差异和人工结论。
 未获人工确认不得称为完成或创建发布标签。
 
+### 15. 发布与开源（可选）
+
+**用户没提出就不要做。** 重建成品是他人著作的衍生，这一步涉及著作权，因此规则与其它阶段不同：**agent 不做权利判断，只准备产物与检查泄漏**。
+
+两条硬规则：
+
+1. **是否开源必须由人类回答**。可以准备产物、可以推送到用户指定的远端，但"仓库是否公开"必须用户明确表态后才执行；不得自行设为 public，也不得自行选择许可证。
+2. **扫描件与页图绝不能进入版本控制**。它们是本地 QA 输入，不是项目源码。一旦提交，事后删除仍能从 Git 历史恢复，属于既成事实的再分发。
+
+向用户确认三件事后再动手：发布范围（只发布工具链，还是连同重建正文）、权利状态（含正文时是否已获权利人许可）、可见性（私有 / 公开 / 仅本地提交）。
+
+四件产物与六个检查项见 [release-and-open-source.md](references/governance/release-and-open-source.md)。摘要：
+
+- `.gitignore` 必须在**首次提交之前**就位（重点是 `.reconstruct-scanned-pdf-to-latex/*.png` 与 `/reference/`、`/sources/`）；
+- `LICENSE` 必须是**带范围声明**的许可证，不能是裸 MIT —— 它只覆盖项目自有的脚本与基础设施；
+- `NOTICE.md` 列出被排除材料（重建正文、插图、版式、扫描、第三方字体）与依赖边界；
+- `README.md` 让陌生人能一条命令构建；
+- 源码包与发布包**分开打包**（法律地位不同），各带清单与 SHA-256；
+- 提交或推送前运行 `scripts/audit_release.py`，确认没有图片/PDF 进入版本控制。
+
 ## 参考资料
 
 `references/` 分三层：**契约层**是动手前必须知道的约定，**手法层**是做的时候查的操作规则，**治理层**是协作与验收。按当前阶段取用即可，不必全读。
@@ -376,6 +397,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 | 12 矩阵构建 | [contract/workbook-matrix.md](references/contract/workbook-matrix.md) |
 | 并行协作（跨阶段） | [governance/subagent-orchestration.md](references/governance/subagent-orchestration.md)、[governance/collaboration-and-baseline.md](references/governance/collaboration-and-baseline.md) |
 | Git 检查点 | [governance/git-workflow.md](references/governance/git-workflow.md) |
+| 15 发布与开源（可选） | [governance/release-and-open-source.md](references/governance/release-and-open-source.md) |
 
 ### 契约层 `references/contract/`
 
@@ -397,6 +419,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - [collaboration-and-baseline.md](references/governance/collaboration-and-baseline.md)：基线冻结、批次纪律、收敛门与不可逆操作保护。
 - [review-checklist.md](references/governance/review-checklist.md)：结构、编译、视觉和人工复核门槛。
 - [git-workflow.md](references/governance/git-workflow.md)：检查点、提交消息格式。
+- [release-and-open-source.md](references/governance/release-and-open-source.md)：发布与开源的产物、权利边界、双通道打包、泄漏审计。
 
 ### 脚本
 
@@ -420,6 +443,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - `scripts/audit_pdf_build.py`：成品 PDF 对象层审计；整页位图、答案哨兵泄漏与逐页纸型核对。
 - `scripts/audit_page_density.py`：按墨迹密度筛查异常稀疏页，帮助定位分页漂移；只做诊断。
 - `scripts/build_profiles.py`：纸型尺寸的单一事实源，`.cls` 与成品审计共用。
+- `scripts/audit_release.py`：发布前泄漏审计；确认扫描件/页图未进入版本控制，法律文件齐备。
 
 **调度**
 
