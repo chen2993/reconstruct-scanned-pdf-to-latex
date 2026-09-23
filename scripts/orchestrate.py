@@ -228,7 +228,8 @@ def task_packet(
 def load_state(project: Path) -> dict:
     payload = read_json(control_dir(project) / DISPATCH_FILE)
     payload.setdefault("batches", {})
-    payload.setdefault("concurrency", 1)
+    # 0 表示不设人为上限：真实上限由运行环境决定，不应由脚本猜一个数字卡死。
+    payload.setdefault("concurrency", 0)
     return payload
 
 
@@ -237,6 +238,12 @@ def save_state(project: Path, payload: dict) -> None:
 
 
 def cmd_plan(project: Path, size: int, concurrency: int) -> int:
+    """规划批次。``concurrency`` 为 0 表示不设人为上限（推荐）。
+
+    真实并发上限取决于运行环境（能同时跑多少执行单元、上游是否限流），脚本不应
+    猜一个数字把它卡死。需要软门时可显式传正整数。
+    """
+
     # 先验证配置，避免把一个坏基线切成批次再让每个单元各自撞墙。
     load_config(project)
     batches = plan_batches(project, size)
@@ -261,43 +268,61 @@ def cmd_plan(project: Path, size: int, concurrency: int) -> int:
     return 0
 
 
-def cmd_next(project: Path, force: bool) -> int:
+def cmd_next(project: Path, count: int, force: bool) -> int:
+    """派发待处理批次，并可一次派多个。
+
+    默认**不设人为上限**：``concurrency`` 为 0 时不排队，由调度者按运行环境实际
+    能承载的并发自行决定派多少。``--count`` 控制本次派发几个（0 = 全部待处理），
+    这样调度者一次调用就能填满流水线，而不是连调多次。
+    """
     state = load_state(project)
     batches = state.get("batches") or {}
     if not batches:
         print("尚未规划批次；先运行 plan。", file=sys.stderr)
         return 2
     order = sorted(batches, key=lambda key: batches[key]["start"])
-    in_flight = [
-        key for key in order if batches[key]["status"] in {"dispatched", "in_progress"}
-    ]
-    limit = int(state.get("concurrency", 1) or 1)
-    # 并发上限是“最多同时有几个批次在飞”，不是一个 boolean 开关。
-    # 达到上限后排队，而不是继续叠加；`--force` 只在确知可并行时越过它。
-    if len(in_flight) >= limit and not force:
-        print(
-            f"已有 {len(in_flight)} 个批次未验收（并发上限 {limit}）: "
-            + ", ".join(in_flight)
-            + "；先 verify 再派下一批。",
-            file=sys.stderr,
-        )
-        return 1
+    limit = int(state.get("concurrency", 0) or 0)
+    if limit > 0 and not force:
+        in_flight = [
+            key
+            for key in order
+            if batches[key]["status"] in {"dispatched", "in_progress"}
+        ]
+        if len(in_flight) >= limit:
+            print(
+                f"已有 {len(in_flight)} 个批次未验收（软上限 {limit}）: "
+                + ", ".join(in_flight)
+                + "；先 verify 再派下一批，或用 --force 越过。",
+                file=sys.stderr,
+            )
+            return 1
+
     pending = [key for key in order if batches[key]["status"] == "pending"]
     if not pending:
         print("没有待派发的批次。")
         return 0
-    chosen = pending[0]
-    batch = Batch(chosen, batches[chosen]["start"], batches[chosen]["end"])
+
+    chosen_keys = pending if count <= 0 else pending[:count]
+    # 边界扫描只做一次：一次调用里多个批次共享同一份源码快照。
     open_at = open_owners_at_boundaries(project)
     packet_dir = control_dir(project) / DISPATCH_DIR
     packet_dir.mkdir(parents=True, exist_ok=True)
-    packet_path = packet_dir / f"{chosen}.md"
-    packet_path.write_text(
-        task_packet(project, batch, open_at), encoding="utf-8", newline="\n"
-    )
-    batches[chosen]["status"] = "dispatched"
+
+    for chosen in chosen_keys:
+        batch = Batch(chosen, batches[chosen]["start"], batches[chosen]["end"])
+        packet_path = packet_dir / f"{chosen}.md"
+        packet_path.write_text(
+            task_packet(project, batch, open_at), encoding="utf-8", newline="\n"
+        )
+        batches[chosen]["status"] = "dispatched"
+        print(f"已派发 {chosen}；任务包: {packet_path.relative_to(project).as_posix()}")
+
     save_state(project, state)
-    print(f"已派发 {chosen}；任务包: {packet_path.relative_to(project).as_posix()}")
+    if len(chosen_keys) == 1:
+        return 0
+    remaining = len(pending) - len(chosen_keys)
+    suffix = f"，剩余 {remaining} 个待派发" if remaining else ""
+    print(f"本次共派发 {len(chosen_keys)} 个批次{suffix}。")
     return 0
 
 
@@ -472,11 +497,23 @@ def parse_args() -> argparse.Namespace:
     plan = sub.add_parser("plan", help="按连续页规划批次")
     plan.add_argument("--batch", type=int, default=10, help="每批页数（默认 10）")
     plan.add_argument(
-        "--concurrency", type=int, default=1, help="允许同时在跑的批次数（默认 1）"
+        "--concurrency",
+        type=int,
+        default=0,
+        help=(
+            "软上限：允许同时在跑的批次数。0（默认）= 不设上限，"
+            "由运行环境决定实际并发；传正整数才启用排队门"
+        ),
     )
-    nxt = sub.add_parser("next", help="派发下一个待处理批次并生成任务包")
+    nxt = sub.add_parser("next", help="派发待处理批次并生成任务包")
     nxt.add_argument(
-        "--force", action="store_true", help="忽略未验收批次，强制派发下一批"
+        "--count",
+        type=int,
+        default=1,
+        help="本次派发几个批次；0 = 全部待处理（默认 1）",
+    )
+    nxt.add_argument(
+        "--force", action="store_true", help="越过已配置的软上限（concurrency > 0 时才有意义）"
     )
     verify = sub.add_parser("verify", help="校验一个批次")
     verify.add_argument("batch", help="批次 ID，例如 b001-010")
@@ -503,12 +540,15 @@ def main() -> int:
             if args.batch < 1:
                 print("--batch 必须为正整数。", file=sys.stderr)
                 return 2
-            if args.concurrency < 1:
-                print("--concurrency 必须为正整数。", file=sys.stderr)
+            if args.concurrency < 0:
+                print("--concurrency 不能为负数（0 表示不设上限）。", file=sys.stderr)
                 return 2
             return cmd_plan(project, args.batch, args.concurrency)
         if args.command == "next":
-            return cmd_next(project, args.force)
+            if args.count < 0:
+                print("--count 不能为负数（0 表示全部）。", file=sys.stderr)
+                return 2
+            return cmd_next(project, args.count, args.force)
         if args.command == "verify":
             return cmd_verify(project, args.batch)
         if args.command == "checkpoint":

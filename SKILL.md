@@ -243,7 +243,9 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 [references/governance/collaboration-and-baseline.md](references/governance/collaboration-and-baseline.md)。
 
 调度节奏用 `scripts/orchestrate.py` 固定下来：`plan` 切批 → `next` 生成任务包 → 单元转写 → `verify` 校验 → `checkpoint` 提交检查点 → 再 `next`。
-任务包自带样式摘要版本、文件白名单、逐页分型、跨页交接和停工反馈格式；在飞批次数达到并发上限时 `next` 会排队而不是继续派发（`plan --concurrency` 设定上限），`checkpoint` 只提交通过校验的批次。
+任务包自带样式摘要版本、文件白名单、逐页分型、跨页交接和停工反馈格式。
+
+**并发不设人为上限**：`--concurrency` 默认为 0（不设上限），由运行环境决定实际能承载多少；`next --count N` 可一次派发 N 个批次（`--count 0` = 全部待处理），这样一次调用就能填满流水线。真实上限要靠**实测**得出——从保守的并发量起步，逐步加大直到出现限流、超时或执行单元失败增多，然后退回到稳定值（见 [subagent-orchestration.md](references/governance/subagent-orchestration.md) 第 4 节）。`checkpoint` 只提交通过校验的批次。
 
 原始需求、差异清单、发现的问题和结论写进 `progress.md` 和 `reviews/`，不写进页面源码；源码不保留“待提取”“承接上页”“续见 PDF 第 N 页”之类的转写笔记。
 

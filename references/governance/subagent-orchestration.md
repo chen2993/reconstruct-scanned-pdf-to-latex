@@ -93,16 +93,27 @@
 
 ## 4. 并发节奏
 
-并发上限由运行环境实际支持的能力决定，然后用调度器固定下来：
+**不要给自己设人为上限。** 脚本默认 `--concurrency 0`（不设上限），因为真实上限取决于运行环境——能同时跑多少执行单元、上游是否限流、单单元吃多少上下文——脚本猜不出这个数字，写死只会白等。
 
 ```powershell
-python -X utf8 scripts/orchestrate.py <project> plan --batch 10 --concurrency <N>
-python -X utf8 scripts/orchestrate.py <project> next      # 生成任务包并派发
+python -X utf8 scripts/orchestrate.py <project> plan --batch 10
+python -X utf8 scripts/orchestrate.py <project> next --count 0   # 一次派发全部待处理
 python -X utf8 scripts/orchestrate.py <project> verify b001-010
 python -X utf8 scripts/orchestrate.py <project> checkpoint b001-010
 ```
 
-- `--concurrency N` 表示最多 N 个批次同时在飞；达到上限后 `next` 排队而不是继续派发；
+### 用实测确定并发上限
+
+从保守值起步，逐步加压，观察症状，退回到稳定点：
+
+1. **起步**：先按 2–4 个单元试派一批，确认基本链路正常（任务包能被读懂、单元能读图、产物能过验收）；
+2. **加压**：每轮把并发提高一档（例如 4 → 8 → 16），每次只改这一个变量；
+3. **观察症状**：出现以下任一情况说明超过上限——上游返回限流/超时、`BLIND` 比例升高、单元中途失败变多、`verify` 通过率下降；
+4. **回退**：退回到最后一个稳定值，并把实测结论写进 `progress.md`（环境、并发量、症状），后续会话直接沿用，不必重新试。
+
+实测参考：`workflow` 类工具单次运行约 14–16 个并发单元；真实项目在这个量级下仍出现单元中途失败，根因是**读图过多导致上下文耗尽**——所以并发上限和读图预算是两个独立的约束，都要管。
+
+- `next --count N` 一次派 N 个批次（`0` = 全部待处理），一次调用即可填满流水线；`--concurrency > 0` 时才启用软排队门；
 - 每个批次内部仍是三轮：原生多模态转写 → 逐行内容复核 → 编译与版式复核；
 - 批次完成后主执行者验收，通过才派下一批；`checkpoint` 会把该批提交为 Git 检查点；
 - **“已派发”不等于“已完成”**：产物存在性和内容质量分开核对，只查存在会漏掉空文件与占位内容。

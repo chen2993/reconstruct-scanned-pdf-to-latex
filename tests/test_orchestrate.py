@@ -54,33 +54,67 @@ def test_next_creates_task_packet(planned):
     assert "停工反馈" in text
 
 
-def test_next_refuses_while_a_batch_is_unverified(planned):
-    assert orchestrate(planned, "next").returncode == 0
-    second = orchestrate(planned, "next")
-    assert second.returncode == 1
-    assert "未验收" in second.stderr
+def test_next_does_not_gate_by_default(planned):
+    """默认不设人为上限：连续 next 不应被排队门拦住。
 
+    真实并发上限由运行环境决定，脚本猜不出这个数字，写死只会白等。
+    """
 
-def test_next_force_overrides_the_gate(planned):
-    orchestrate(planned, "next")
-    forced = orchestrate(planned, "next", "--force")
-    assert forced.returncode == 0
+    for _ in range(3):
+        result = orchestrate(planned, "next")
+        assert result.returncode == 0, result.stderr
+    state = planned.dispatch_state()
+    assert state["batches"]["b001-010"]["status"] == "dispatched"
+    assert state["batches"]["b011-020"]["status"] == "dispatched"
+    assert state["batches"]["b021-025"]["status"] == "dispatched"
 
-def test_concurrency_allows_that_many_batches_in_flight(batch_project):
-    """并发上限是同时在跑的批次数，不是一个 boolean 派发门。"""
+def test_default_concurrency_is_unbounded(planned):
+    assert planned.dispatch_state()["concurrency"] == 0
 
-    orchestrate(batch_project, "plan", "--batch", "10", "--concurrency", "2")
-    assert orchestrate(batch_project, "next").returncode == 0
-    # 第二个批次仍可派发：1 个在飞 < 上限 2
-    assert orchestrate(batch_project, "next").returncode == 0
+def test_next_count_dispatches_several_at_once(batch_project):
+    """一次调用填满流水线，而不是连调多次。"""
+
+    orchestrate(batch_project, "plan", "--batch", "10")
+    result = orchestrate(batch_project, "next", "--count", "2")
+    assert result.returncode == 0, result.stderr
     state = batch_project.dispatch_state()
     assert state["batches"]["b001-010"]["status"] == "dispatched"
     assert state["batches"]["b011-020"]["status"] == "dispatched"
-    # 达到上限后必须排队
+    assert state["batches"]["b021-025"]["status"] == "pending"
+
+def test_next_count_zero_dispatches_everything_pending(batch_project):
+    orchestrate(batch_project, "plan", "--batch", "10")
+    result = orchestrate(batch_project, "next", "--count", "0")
+    assert result.returncode == 0, result.stderr
+    state = batch_project.dispatch_state()
+    assert all(entry["status"] == "dispatched" for entry in state["batches"].values())
+
+def test_soft_limit_still_available_when_configured(batch_project):
+    """显式设了软上限才启用排队门。"""
+
+    assert orchestrate(batch_project, "plan", "--batch", "10", "--concurrency", "2").returncode == 0
+    assert orchestrate(batch_project, "next").returncode == 0
+    assert orchestrate(batch_project, "next").returncode == 0
     blocked = orchestrate(batch_project, "next")
     assert blocked.returncode == 1
-    assert "并发上限 2" in blocked.stderr
+    assert "软上限 2" in blocked.stderr
 
+def test_soft_limit_can_be_overridden_with_force(batch_project):
+    orchestrate(batch_project, "plan", "--batch", "10", "--concurrency", "1")
+    assert orchestrate(batch_project, "next").returncode == 0
+    overridden = orchestrate(batch_project, "next", "--force")
+    assert overridden.returncode == 0, overridden.stderr
+
+def test_negative_concurrency_is_rejected(batch_project):
+    result = orchestrate(batch_project, "plan", "--concurrency", "-1")
+    assert result.returncode == 2
+    assert "不能为负数" in result.stderr
+
+def test_negative_count_is_rejected(batch_project):
+    orchestrate(batch_project, "plan", "--batch", "10")
+    result = orchestrate(batch_project, "next", "--count", "-1")
+    assert result.returncode == 2
+    assert "不能为负数" in result.stderr
 
 def test_packet_reports_cross_page_handoff(batch_project):
     # an example spans pages 6..7, i.e. inside the first batch
