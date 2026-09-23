@@ -1,5 +1,22 @@
 MIT License
 
+
+Scope notice
+
+This license applies only to material independently authored for this
+repository as software or project infrastructure: the scripts and tools, the
+reference class and build script, the instruction set and documentation, and
+the regression tests, in each case only to the extent that the contributors
+have the right to license that material.
+
+This license does not apply to textbook content reconstructed with these
+tools, to fragments of source books quoted in the documentation as worked
+examples, or to source scans, page renders and third-party reference
+projects, which are local QA inputs and must not be committed. Compiled
+outputs combine project infrastructure with the user content rights they are
+responsible for. See NOTICE.md for the full content and dependency
+boundaries.
+
 Copyright (c) 2026 reconstruct-scanned-pdf-to-latex contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

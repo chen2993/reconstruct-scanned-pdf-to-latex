@@ -38,3 +38,14 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# 本地 QA 输入：原书扫描、页图渲染、外部参考工程。只在本地存在，绝不进版本控制。
+# 技能仓库的 references/ 是文档目录，不受此规则影响。
+/reference/
+/sources/
+*.orig
+*.rej
+
+# 发布与打包产物
+/packages/
+/dist/packages/

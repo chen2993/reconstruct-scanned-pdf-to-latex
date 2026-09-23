@@ -177,3 +177,63 @@ def test_not_a_git_repo_is_usage_error(tmp_path):
     result = audit(project)
     assert result.returncode == 2
     assert "不是 Git 工作树" in result.stderr
+
+def test_references_dir_is_documentation_in_a_skill_repo(tmp_path):
+    """技能仓库的 references/ 是文档目录，必须能被跟踪而不是被判为 QA 输入。
+
+    重建项目里 references/ 存的是原书扫描与外部参考；技能仓库里它是成体系的文档。
+    同名目录、相反要求，所以判据要看仓库类型。
+    """
+
+    project = init_repo(tmp_path / "skill")
+    (project / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
+    references = project / "references"
+    references.mkdir()
+    for name in ("a.md", "b.md", "c.md"):
+        (references / name).write_text("doc\n", encoding="utf-8")
+    (project / "LICENSE").write_text("MIT\n", encoding="utf-8")
+    (project / "NOTICE.md").write_text("# Notice\n", encoding="utf-8")
+    (project / ".gitignore").write_text("/reference/\n/sources/\n/dist/\n/tmp/\n", encoding="utf-8")
+    git(project, "add", "-A")
+    git(project, "commit", "-m", "init")
+
+    result = audit(project)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "技能仓库" in result.stdout
+
+
+def test_reconstruction_project_still_requires_references_ignored(tmp_path):
+    """重建项目里 references/ 是 QA 输入，必须被忽略。"""
+
+    project = init_repo(tmp_path / "book")
+    (project / "LICENSE").write_text("MIT\n", encoding="utf-8")
+    (project / "NOTICE.md").write_text("# Notice\n", encoding="utf-8")
+    (project / ".gitignore").write_text("/reference/\n/sources/\n/dist/\n/tmp/\n", encoding="utf-8")
+    git(project, "add", "-A")
+    git(project, "commit", "-m", "init")
+
+    result = audit(project)
+    assert result.returncode == 1
+    assert "/references/" in result.stderr
+
+
+def test_skill_repo_with_image_under_references_is_not_special(tmp_path):
+    """只要 references/ 下混进了图片，就不再按技能文档目录处理。"""
+
+    project = init_repo(tmp_path / "skill")
+    (project / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
+    references = project / "references"
+    references.mkdir()
+    for name in ("a.md", "b.md", "c.md"):
+        (references / name).write_text("doc\n", encoding="utf-8")
+    (references / "scan.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (project / "LICENSE").write_text("MIT\n", encoding="utf-8")
+    (project / "NOTICE.md").write_text("# Notice\n", encoding="utf-8")
+    (project / ".gitignore").write_text("/reference/\n/sources/\n/dist/\n/tmp/\n", encoding="utf-8")
+    git(project, "add", "-A", "-f")
+    git(project, "commit", "-m", "init")
+
+    result = audit(project)
+    # 图片本身就会被 tracked_scans 抓到；同时 references/ 也回到"必须忽略"的要求
+    assert result.returncode == 1
+    assert "scan.png" in result.stderr
