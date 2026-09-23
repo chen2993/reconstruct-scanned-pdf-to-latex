@@ -133,7 +133,9 @@ project/
 
 ## 阶段总表
 
-14 个阶段各自的关键产物与"能否进下一步"的门槛。细节在各阶段正文与对应参考文档中。
+各阶段的关键产物与"能否进下一步"的门槛。细节在各阶段正文与对应参考文档中。
+
+**阶段是跨会话的**：一本几百页的书往往一个阶段一个会话，甚至一个阶段分几次续跑。因此每个会开始都要先读落盘的状态文件（`progress.md`、`reviews/`、`dispatch.json`、`style-cards.md`），并按本表核对该阶段的**进入条件**是否真的满足——不要假定上一会话已经做完。
 
 | 阶段 | 关键产物 | 进入下一阶段的条件 |
 |---|---|---|
@@ -234,7 +236,9 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 ### 4.5 协作与并行纪律（跨阶段）
 
-并发只有建立在对齐基线上才可靠。角色边界、任务包六要素、图片读取纪律、并发节奏与收敛门见
+本技能的形态是**一个调度者管多个执行单元**（不是多个调度者并行推同一本书）；不同阶段各开一个会话属于正常做法，阶段之间靠落盘状态交接。
+
+并发只有建立在对齐基线上才可靠。角色边界、任务包要素、图片读取纪律、并发节奏与收敛门见
 [references/governance/subagent-orchestration.md](references/governance/subagent-orchestration.md)；批次基线与不可逆操作保护见
 [references/governance/collaboration-and-baseline.md](references/governance/collaboration-and-baseline.md)。
 
