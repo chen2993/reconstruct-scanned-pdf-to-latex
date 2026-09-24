@@ -6,6 +6,7 @@
 ## 内容
 
 - [1 环境全覆盖](#1-环境全覆盖)
+- [1.5 编号类内容](#15-编号类内容一律用语义机制生成)
 - [2 合法嵌套](#2-合法嵌套)
 - [3 交叉引用](#3-交叉引用)
 - [4 跨页与媒体](#4-跨页与媒体)
@@ -46,6 +47,129 @@
 - 存疑只在复核记录（`reviews/`）里写一句"原书印作 X，疑为 Y 之误，已照录"；
 - 需要更正说明时，只能放在**新增模块**里并标明新增，不得直接改动正文；
 - 实测反例：某单元把原书 `（或 x = x(x)）`（显系 `x(y)` 之误）直接改写成 `x(y)`——这是篡改底本，属于必须避免的错误。
+
+## 1.5 编号类内容一律用语义机制生成
+
+**凡是有编号或标签的成组内容，标签都必须由 `.cls` 的计数机制产生，源码只提供内容。** 这是本技能被实测违反最多的一条：agent 遇到小问和选择题时容易直接手打 `(1)`、`（1）`、`A.`，结果编号样式与原书不一致、跨页续写时重号、也无法交叉引用。
+
+判断规则很简单：**如果你在源码里敲出了编号字符本身，就是错的。**
+
+| 内容 | 错误写法 | 正确写法 |
+|---|---|---|
+| 小问 / 分步 | `(1) 求……` `（2）证明……` | 语义列表环境，标签由 `.cls` 生成 |
+| 选择题选项 | `A. ……` `（B）……` | 选项命令/环境，标签由 `.cls` 生成 |
+| 例题、习题、定义、定理 | `例 1.2 ……` | 题目环境，编号由计数器产生 |
+| 步骤、圈码序号 | `① ……` `步骤 1：` | 对应计数器 + 生成的序号命令 |
+| 公式编号 | 手打 `(3.1)` | `\tag` 或计数器 |
+| 图、表、算法编号 | 手写「图 3.1」 | 媒体环境 + `\ref` |
+
+### 小问与分步
+
+用**语义列表**，不要用裸 `enumerate` 手写标签，也不要用纯文本：
+
+```tex
+% .cls：定义一次，全书复用
+\newlist{booksubitems}{enumerate}{2}
+\setlist[booksubitems,1]{label=(\arabic*), leftmargin=2.2em, itemsep=0.3ex}
+\setlist[booksubitems,2]{label=(\roman*), leftmargin=2.0em, itemsep=0.3ex}
+
+% 页面源码：只写内容，标签自动生成（1）（2）…
+\begin{booksubitems}
+  \item 求函数的定义域；
+  \item 判断 $f(x)$ 在 $x=0$ 处的连续性。
+\end{booksubitems}
+```
+
+要点：
+
+- **标签格式在 `.cls` 里定一次**（`label=`、缩进、间距），页面源码不出现编号字符；
+- 原书用 `（1）` 还是 `(1)`、用阿拉伯数字还是罗马数字，属于**逐本量取的事实**——按代表页确认后写进 `.cls`，不要默认一种；
+- 需要编号稳定以支持交叉引用时，用 `ref=` 指定 `\ref` 的输出形式；
+- 层级最多两层（`（1）` 下再有 `(a)`），更深就该考虑换语义环境。
+
+### 选择题选项
+
+**选项标签由类文件生成**，源码连 `A`/`B` 都不写。原书的选项排布有单行多列、二二网格、竖排等多种，**同一套内容需要按原书版式提供若干变体**——变体是 `.cls` 的命令，不是页面里的手排表格：
+
+```tex
+% .cls：定义一组版式变体，标签统一由计数器生成
+\newcounter{bookchoice}
+% 标签样式只在这一处切换：\bookchoiceentry 始终调用 \bookchoiceletter，
+% 想换成括号版只需 \let\bookchoiceletter\bookchoiceparenletter。
+\newcommand{\bookchoiceletter}{\stepcounter{bookchoice}\Alph{bookchoice}.\nobreak\hspace{.35em}}
+\newcommand{\bookchoiceparenletter}{\stepcounter{bookchoice}(\Alph{bookchoice})\nobreak\hspace{.35em}}
+\newcommand{\bookchoiceentry}[1]{\textup{\bookchoiceletter}#1}
+
+% 单行四列（常见）
+\newcommand{\bookchoicesfour}[4]{%
+  \par\begingroup\setcounter{bookchoice}{0}%
+  \noindent\begin{tabular}{@{}*4{>{\raggedright\arraybackslash}p{40mm}@{}}}
+    \bookchoiceentry{#1}&\bookchoiceentry{#2}&\bookchoiceentry{#3}&\bookchoiceentry{#4}%
+  \end{tabular}\par\endgroup}
+
+% 二二网格（选项较长或含公式）
+\newcommand{\bookchoicestwobytwo}[4]{%
+  \par\begingroup\setcounter{bookchoice}{0}%
+  \noindent\begin{tabular}{@{}>{\raggedright\arraybackslash}p{76mm}@{}>{\raggedright\arraybackslash}p{76mm}@{}}
+    \bookchoiceentry{#1}&\bookchoiceentry{#2}\\[1.4pt]
+    \bookchoiceentry{#3}&\bookchoiceentry{#4}%
+  \end{tabular}\par\endgroup}
+```
+
+```tex
+% 页面源码：只给内容，不给标签
+\bookchoicesfour{$0$}{$-\infty$}{$+\infty$}{不存在但也不是 $\infty$}
+```
+
+要点：
+
+- **每次进入选项组要重置选项计数器**（`\setcounter{bookchoice}{0}`），否则第二题会从 E 开始；
+- 标签形式（`A.` / `(A)` / `（A）`）由 `.cls` 定，可用一条 `\let` 切换风格，不必为每种风格复制命令；
+- **选项排布是原书事实**：单行四列、二二网格、竖排、含公式的显示式选项，都要按代表页量取列宽与间距，命名成变体；
+- 列宽用固定 `p{...}` 而不是内容驱动的 `X`／`\extracolsep`——后者会随公式宽度变化把后续选项整体推移，跨页时更明显；
+- 选项若含展示公式，用 `\displaystyle` 包裹（原书选项里的分式与求和通常是显示尺寸）；
+- **不要**用 `itemize` 加 `\item[A.]` 冒充选项：标签仍是手写的，且缩进/换行行为不受控。
+
+### 圈码与步骤
+
+圈码 `①` 和小标题式的「步骤 1」同样是成组编号，不手打：
+
+```tex
+% .cls
+\newcommand{\bookcircled}[1]{\textcircled{\scriptsize #1}}
+\newlist{bookcircleditems}{enumerate}{1}
+\setlist[bookcircleditems,1]{label=\bookcircled{\arabic*}, labelsep=0.5em, leftmargin=2.4em}
+```
+
+页面源码用列表环境：
+
+```tex
+\begin{bookcircleditems}
+  \item 当 $x\to0$ 时；
+  \item 当 $x\to\infty$ 时。
+\end{bookcircleditems}
+```
+
+需要单独插入一个序号时（例如正文中间接一个 `①`），用 `.cls` 提供的命令，而不要手打字符。分步说明用 `bookmethodstep`、`bookproofstep` 这类**带计数器**的步骤环境，标签由环境生成。
+
+### 为什么必须这样
+
+- **跨页续写不会重号**：同一题的续写段重新进入环境时，计数器保持连续；手打编号必然重号；
+- **样式一致**：全书编号格式只在一处定义，改一次全改；
+- **可引用**：计数器配合 `\label`／`\ref` 才能做交叉引用，手打编号无法被引用；
+- **可筛选**：做题本按题目/答案环境筛选，裸文本无法被筛选开关识别。
+
+### 复核时的检查方式
+
+逐页转写完成后，运行机械审计：
+
+```powershell
+python <skill>/scripts/audit_hardcoded_numbers.py <project>
+```
+
+它按"**连续递进序列**"判定：`（1）→（2）`、`A. → B.`、`① → ②` 这种成组出现才报，单点的 `由（1）式得`、`(38.20,182.0)` 坐标、`rank(A)`、`方法 1` 都不报；行首的 `例 10`、`步骤 1` 另行单点报告。命中的每一组都要改成语义环境或选项命令。原书正文里确实成组的字面编号，在同一行加 `% allow-number` 豁免。
+
+审计只能证明"没有成组手打编号"，不能证明"用对了环境"。因此同时确认每种成组内容都有对应的语义环境或命令，并登记在 `docs/class-api.md`。
 
 ## 2. 合法嵌套
 

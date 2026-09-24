@@ -266,6 +266,15 @@ function Invoke-Job([object]$Job) {
             throw "来源页标记审计失败: $($Job.JobName)"
         }
     }
+    # 小问、选项、题号、圈码必须由类文件计数机制生成；源码里的字面编号会
+    # 导致样式不符、跨页重号、无法引用与筛选，而目视复核在几百页规模上必漏。
+    $numberingScript = Join-Path $ProjectRoot 'scripts\audit_hardcoded_numbers.py'
+    if (Test-Path -LiteralPath $numberingScript -PathType Leaf) {
+        & python '-X' 'utf8' $numberingScript $ProjectRoot
+        if ($LASTEXITCODE -ne 0) {
+            throw "手打编号审计失败: $($Job.JobName)"
+        }
+    }
     $tocHashes = @()
     $outlineHashes = @()
     Push-Location $LatexRoot

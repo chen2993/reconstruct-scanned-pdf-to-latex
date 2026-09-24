@@ -31,7 +31,9 @@ description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译�
 - 自定义环境、命令、计数器、标签键与配置 API **只能用英文 ASCII 标识符**（字母、数字、下划线）；不得用中文或连字符。
   中文只能出现在正文、题注、角色显示文本等**值**里；连字符只允许出现在文件名、页面标识、样式卡片 ID、路径与 Git 提交文本中。
   带星号布局环境（`figure*`、`align*`）按既有用法使用，但不得给自定义语义所有者加星号。完整契约见 [references/contract/class-contract.md](references/contract/class-contract.md)。
-- 所有显示编号由 `.cls` 计数器产生，逐页源码不得硬编码例题号、习题号、定义号、公式号、图表号或步骤号。
+- 所有显示编号由 `.cls` 计数器产生，逐页源码不得硬编码例题号、习题号、定义号、公式号、图表号、步骤号。
+  **判据：源码里不得出现编号字符本身**——小问的 `(1)`/`（1）`、选择题的 `A.`/`（B）`、圈码 `①`、题号「例 1.2」都必须由语义列表、选项命令或题目环境生成（写法见 [page-authoring.md](references/contract/page-authoring.md) 第 1.5 节）。
+  实测这是违规最多的一条：agent 遇到小问和选择题容易直接手打标签，导致样式与原书不符、跨页续写重号、且无法交叉引用与筛选。
 - 目录和 PDF 书签必须由 `.cls` 集中管理：`latex/front/toc.tex` 只调用一次项目提供的 `\bookmaketoc` 自动目录指令，不得手写目录条目、页码或逐页 `\addcontentsline`；
   结构命令负责自动写入目录。
 - 前后置模块的书签以**原书实际拥有的模块**为准，不是固定清单：封面、前言、献词、目录、书末页等只要原件里有，就**必须**提取出来并各自成为顶层书签，指向该模块的实际第一页；
@@ -307,6 +309,8 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 发现缺样式、样式变体或无法表达的版式，立即在 `reviews/style-gaps.md` 报告并暂停该块；主执行者更新 `.cls` 后，通知所有相关单元重新读取新版本再继续。
 图形只登记稳定 ID 和占位，不在本阶段实现。批次按“转写—复核—验收”逐批推进，前一批未经主执行者确认不派下一批。
 
+单元转写时对**编号类内容**（小问、分步、选择题选项、圈码序号）必须用 `.cls` 的语义列表或选项命令，标签由类文件生成；**源码里不得出现编号字符**。写法见 [page-authoring.md](references/contract/page-authoring.md) 第 1.5 节。
+
 ### 9. 矢量图实现
 
 每个单元一次只实现一张图，写入 `latex/pages/figures/figure-pages-023-001.tex`（`pages` 固定为源页所在分区，`023` 为源页标识，`001` 为本页第几张图；
@@ -462,6 +466,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 - `scripts/audit_toc.py`：目录模块与自动目录指令的静态审计。
 - `scripts/audit_provenance.py`：正文来源页标记与前后置模块覆盖的静态审计。
+- `scripts/audit_hardcoded_numbers.py`：审计逐页源码里的成组字面编号（小问、选项、圈码）与手打题号/步骤号；这些编号必须由 `.cls` 生成。
 - `scripts/audit_semantics.py`：语义所有权、跨页环境结构与集中职责归属的静态审计。
 - `scripts/audit_pdf_outline.py`：按项目登记的前后置模块清单审计 PDF 顶层书签、顺序与非空目标页。
 - `scripts/audit_pdf_build.py`：成品 PDF 对象层审计；整页位图、答案哨兵泄漏与逐页纸型核对。

@@ -34,6 +34,8 @@
 
 \LoadClass[UTF8,openany]{ctexbook}
 \RequirePackage{amsmath,amssymb}
+\RequirePackage{array}
+\RequirePackage{enumitem}
 \RequirePackage{etoolbox}
 \RequirePackage{geometry}
 \RequirePackage{xcolor}
@@ -492,6 +494,58 @@
   \ifbook@showmedia\book@streamvisibletrue\else\book@streamvisiblefalse\fi
 }
 
+% --------------------------------------------------------------------------
+% Numbering.  Grouped labels are generated here, never typed in page sources:
+% "the source must not contain the numbering characters themselves".
+% --------------------------------------------------------------------------
+\newlist{booksubitems}{enumerate}{2}
+\setlist[booksubitems,1]{label=(\arabic*), labelsep=0.5em, leftmargin=2.2em, itemsep=0.3ex}
+\setlist[booksubitems,2]{label=(\roman*), labelsep=0.5em, leftmargin=2.0em, itemsep=0.3ex}
+\newlist{booksteps}{enumerate}{1}
+\setlist[booksteps,1]{label=(\arabic*), labelsep=0.5em, leftmargin=2.2em, itemsep=0.3ex}
+\newlist{bookromanitems}{enumerate}{1}
+\setlist[bookromanitems,1]{label=(\roman*), labelsep=0.5em, leftmargin=2.0em, itemsep=0.3ex}
+
+% Choice entries keep content and label separate: page sources pass option text
+% only.  One counter per group, reset on entry, so a second question restarts at A.
+\newcounter{bookchoice}
+% Label style is a single switch: \bookchoiceentry always calls
+% \bookchoiceletter, so a variant only has to \let that macro to another style.
+\newcommand{\bookchoiceletter}{\stepcounter{bookchoice}\Alph{bookchoice}.\nobreak\hspace{.35em}}
+\newcommand{\bookchoiceparenletter}{\stepcounter{bookchoice}(\Alph{bookchoice})\nobreak\hspace{.35em}}
+\newcommand{\bookchoiceentry}[1]{\textup{\bookchoiceletter}#1}
+
+\newcommand{\bookchoicesfour}[4]{%
+  \par\begingroup\setcounter{bookchoice}{0}%
+  \noindent\begin{tabular}{@{}*4{>{\raggedright\arraybackslash}p{40mm}@{}}}
+    \bookchoiceentry{#1}&\bookchoiceentry{#2}&\bookchoiceentry{#3}&\bookchoiceentry{#4}%
+  \end{tabular}\par\endgroup}
+\newcommand{\bookchoicestwobytwo}[4]{%
+  \par\begingroup\setcounter{bookchoice}{0}%
+  \noindent\begin{tabular}{@{}>{\raggedright\arraybackslash}p{76mm}@{}>{\raggedright\arraybackslash}p{76mm}@{}}
+    \bookchoiceentry{#1}&\bookchoiceentry{#2}\\[1.4pt]
+    \bookchoiceentry{#3}&\bookchoiceentry{#4}%
+  \end{tabular}\par\endgroup}
+\newcommand{\bookchoicesvertical}[4]{%
+  \par\begingroup\setcounter{bookchoice}{0}%
+  \noindent\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.92\linewidth}@{}}
+    \bookchoiceentry{#1}\\
+    \bookchoiceentry{#2}\\
+    \bookchoiceentry{#3}\\
+    \bookchoiceentry{#4}%
+  \end{tabular}\par\endgroup}
+\newcommand{\bookchoicesparen}[4]{%
+  \par\begingroup\setcounter{bookchoice}{0}%
+  \let\bookchoiceletter\bookchoiceparenletter
+  \noindent\begin{tabular}{@{}*4{>{\raggedright\arraybackslash}p{40mm}@{}}}
+    \bookchoiceentry{#1}&\bookchoiceentry{#2}&%
+    \bookchoiceentry{#3}&\bookchoiceentry{#4}%
+  \end{tabular}\par\endgroup}
+\newcommand{\bookcircled}[1]{\textcircled{\scriptsize #1}}
+\newcounter{bookcircleditem}
+\newcommand{\bookcircleditemnext}{\stepcounter{bookcircleditem}\bookcircled{\arabic{bookcircleditem}}}
+\newlist{bookcircleditems}{enumerate}{1}
+\setlist[bookcircleditems,1]{label=\bookcircled{\arabic*}, labelsep=0.5em, leftmargin=2.4em}
 % --------------------------------------------------------------------------
 % Counter-owned semantic environments. Projects may add roles, not bypass them.
 % --------------------------------------------------------------------------
