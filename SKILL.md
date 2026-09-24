@@ -45,6 +45,7 @@ description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译�
   不得用 `\NewEnviron` 或未经 `\bookinput` 跨页编译验证的正文捕获组件实现。
 - 需要保留的图必须有可编译矢量源码。照片、连续色调或无法诚实矢量化的内容先暂停并询问用户，不得塞入截图或位图。
 - 纸张尺寸、页面分区、语义归属、跨页关系或样式差异无法从证据可靠判断时，立即暂停当前批次并向用户提问；不要用猜测、近似样式或硬编码继续推进。
+- **必须主动询问的决策点到点就问，不要攒着也不要替用户决定**：纸型、舍去页、前后置模块清单、样式变体判定、校样确认、做题本入口形态、主题与做题本范围、发布范围与权利状态。提问要带证据、候选与建议（模板与清单见 [decision-gates.md](references/governance/decision-gates.md)）；能事实验证的事（页数、能否编译、审计结果）自己查，不占用用户注意力。
 - 判断原书纸张尺寸时先读书内印刷信息（“开本”、成品尺寸或其他规格），再用多张页面几何交叉验证；印刷信息缺失、模糊、单位不明或与页面几何冲突时暂停请用户确认，不能凭常见开型猜定。
 - `cover-facsimile`（与封面内容相同的黑白内封复刻页）和仅含版权/出版/印刷信息的 `publication-info` 页默认不进入重建结果：先读取其纸张证据，再在页面命名阶段显式舍去，不生成最终 PNG、前置模块或正文源码。
   含独有序言、目录或正文的混合页不能整页舍去，须暂停请用户确认。
@@ -150,7 +151,7 @@ project/
 | 9 矢量图 | `pages/figures/figure-*.tex` | 每图独立编译通过 |
 | 10 图形复核 | `reviews/figures.md` | 达 90%；原书无的图号/引用已删除 |
 | 11 全书复核 | `reviews/book.md` | 抽查覆盖所有实际存在的类型；未用审计替代人工 |
-| 12 矩阵构建 | `build.ps1`、`dist/` | 所有目标通过编译、outline、成品审计；原子发布 |
+| 12 矩阵构建 | `build.ps1`、`dist/` | 做题本入口形态已由用户确认；所有目标通过编译、outline、成品审计；原子发布 |
 | 13 补充 | 新增模块 | 明确标为新增；未虚构原书书目事实 |
 | 13.5 瘦身 | README 文件树契约 | `latex/` 只剩 LaTeX 源码；无废弃文件 |
 | 14 最终复核 | `reviews/final.md` | 记录命令/页数/纸张/主题/已知差异；**人工已确认** |
@@ -340,7 +341,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 按 [references/contract/workbook-matrix.md](references/contract/workbook-matrix.md) 和 [template/build.ps1](template/build.ps1) 实现根目录 `build.ps1`。
 每个目标生成独立 driver，只定义 `\BookBuildOptions` 并输入入口。
 
-**入口形态由用户选择，两种都支持**（详见 [workbook-matrix.md](references/contract/workbook-matrix.md) 第 2 节）：
+**入口形态必须主动向用户确认**——首次构建做题本前就问，不要让用户自己想（提问模板见 [decision-gates.md](references/governance/decision-gates.md) 第 2 节）。两种都支持（详见 [workbook-matrix.md](references/contract/workbook-matrix.md) 第 2 节）：
 - **单入口 + 类文件开关**：做题本差异全由 `.cls` 条件命令控制，适合差异集中在题目与作答区的情况；
 - **独立做题本入口**（如 `main-workbook.tex` + 专用封面/目录模块）：适合做题本的封面、目录、页眉差异很大的情况。
 
@@ -414,7 +415,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 | 8 逐页转写 | [practice/page-reading.md](references/practice/page-reading.md)、[contract/page-authoring.md](references/contract/page-authoring.md) |
 | 9-10 矢量图 | [practice/figures-and-assets.md](references/practice/figures-and-assets.md) |
 | 11 全书复核 | [practice/pagination-and-navigation.md](references/practice/pagination-and-navigation.md)、[governance/review-checklist.md](references/governance/review-checklist.md) |
-| 12 矩阵构建 | [contract/workbook-matrix.md](references/contract/workbook-matrix.md) |
+| 12 矩阵构建 | [contract/workbook-matrix.md](references/contract/workbook-matrix.md)、[governance/decision-gates.md](references/governance/decision-gates.md) |
 | 并行协作（跨阶段） | [governance/subagent-orchestration.md](references/governance/subagent-orchestration.md)、[governance/collaboration-and-baseline.md](references/governance/collaboration-and-baseline.md)、[governance/dispatch-prompts.md](references/governance/dispatch-prompts.md) |
 | Git 检查点 | [governance/git-workflow.md](references/governance/git-workflow.md) |
 | 15 发布与开源（可选） | [governance/release-and-open-source.md](references/governance/release-and-open-source.md) |
@@ -441,6 +442,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - [dispatch-prompts.md](references/governance/dispatch-prompts.md)：样式提取、结构地图、逐页转写、复核四类单元的派发提示词模板。
 - [review-checklist.md](references/governance/review-checklist.md)：结构、编译、视觉和人工复核门槛。
 - [git-workflow.md](references/governance/git-workflow.md)：检查点、提交消息格式。
+- [decision-gates.md](references/governance/decision-gates.md)：必须由用户决定的时点、提问要点与做题本入口形态的确认模板。
 - [release-and-open-source.md](references/governance/release-and-open-source.md)：发布与开源的产物、权利边界、双通道打包、泄漏审计。
 
 ### 脚本
