@@ -223,7 +223,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - 前置和后置按语义类型写入 `latex/front/`、`latex/back/`，例如 `cover.tex`、`dedication.tex`、`toc.tex`、`preface.tex`、`afterword.tex`、`references.tex`；
   严禁使用 `front-xxx.tex`、`back-xxx.tex` 或其他页码式文件名，一个类型模块可以自然扩展到多页。
 - 正文逐页写入 `latex/pages/pages-001.tex`、`pages-002.tex` 等。
-- `main.tex` 是唯一编排入口：在 `\documentclass` 前用 `\providecommand{\BookBuildOptions}{...}` 接收构建 driver 的目标选项，并通过 `\PassOptionsToClass` 交给项目 `.cls`；
+- `main.tex` 是编排入口：在 `\documentclass` 前用 `\providecommand{\BookBuildOptions}{...}` 接收构建 driver 的目标选项，并通过 `\PassOptionsToClass` 交给项目 `.cls`；
   正文和所有前后置目标共用这一入口。
 - `main.tex` 对前置和后置使用多条原生 `\input{front/cover}`、`\input{front/toc}`、`\input{back/afterword}`，保留人工可调整的顺序；
   入口中的模块清单保持静态并可被审计，不在条件分支中选择另一套文件。需要按 workbook 改变目录或序言时，在同一模块内使用类文件提供的公共条件命令，不复制第二个入口。
@@ -338,7 +338,13 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 ### 12. 编译测试与做题本矩阵
 
 按 [references/contract/workbook-matrix.md](references/contract/workbook-matrix.md) 和 [template/build.ps1](template/build.ps1) 实现根目录 `build.ps1`。
-每个目标生成独立 driver，只定义 `\BookBuildOptions` 并输入同一个 `latex/main.tex`，不得再创建 `main-workbook.tex`。
+每个目标生成独立 driver，只定义 `\BookBuildOptions` 并输入入口。
+
+**入口形态由用户选择，两种都支持**（详见 [workbook-matrix.md](references/contract/workbook-matrix.md) 第 2 节）：
+- **单入口 + 类文件开关**：做题本差异全由 `.cls` 条件命令控制，适合差异集中在题目与作答区的情况；
+- **独立做题本入口**（如 `main-workbook.tex` + 专用封面/目录模块）：适合做题本的封面、目录、页眉差异很大的情况。
+
+**不变的是**：题目与答案的内容只能有一份源码、类文件只有一个、正文 `pages-xxx.tex` 只有一份。独立的是入口与前后置模块，不是题目。两种形态不要混用。
 完整书只构建用户确认的原书尺寸；仅当原件和用户选择都包含相应题型时，才构建例题、习题或全做题本，不为没有题目的教材生成空目标。
 题目目标可分别构建 `original`、`a4`、`pad11`、`pad13`，主题集合由用户确认：默认矩阵只固定 `print` 与护眼黄 `eyecare`，不要把额外主题（例如深色）当成默认交付；
 项目确实实现了其它主题时，才把它加入用户确认的集合并同步矩阵。主题是整组配色，链接、框、表格和页眉页脚都要随主题走，不是只换页面底色。

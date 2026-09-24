@@ -133,7 +133,7 @@ def test_config_referencing_unregistered_parent_fails(project, run):
 def test_missing_entry_file_fails(tmp_path, run):
     result = run("audit_semantics.py", tmp_path)
     assert result.returncode == 2
-    assert "缺少唯一入口" in result.stderr
+    assert "找不到入口文件" in result.stderr
 
 
 def test_comment_only_stub_is_not_a_semantic_error(project, run):

@@ -21,3 +21,23 @@ def resolve_workspace(project: Path, create: bool = False) -> Path:
     if create:
         workspace.mkdir(parents=True, exist_ok=True)
     return workspace
+
+# 入口候选：单入口形态用 main.tex；形态 B（独立做题本入口）还会有 main-workbook.tex。
+# 审计以**完整书入口**为准，因为它声明了全部内容模块；做题本入口只是同一份内容的视图。
+ENTRY_CANDIDATES = ("main.tex", "main-workbook.tex")
+
+
+def resolve_entry(project: Path) -> Path:
+    """返回用于审计的入口文件。
+
+    优先完整书入口；项目只提供做题本入口时退回到它。都找不到时报错，让调用方
+    给出可读提示，而不是静默用一个不存在的路径。
+    """
+
+    latex_root = project / "latex"
+    for name in ENTRY_CANDIDATES:
+        candidate = latex_root / name
+        if candidate.is_file():
+            return candidate
+    listed = "、".join(f"latex/{name}" for name in ENTRY_CANDIDATES)
+    raise FileNotFoundError(f"找不到入口文件（{listed}）")

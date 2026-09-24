@@ -220,4 +220,4 @@ def test_missing_main_fails(tmp_path, batch_project):
     (batch_project.root / "latex" / "main.tex").unlink()
     result = orchestrate(batch_project, "plan")
     assert result.returncode == 2
-    assert "唯一入口" in result.stderr
+    assert "正文范围声明" in result.stderr

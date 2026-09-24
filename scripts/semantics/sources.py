@@ -3,12 +3,32 @@
 from __future__ import annotations
 
 import re
+import sys as _sys
 from pathlib import Path
 
-from .defaults import ENVIRONMENT_NAME, MODULE_FILENAME, PAGE_LIKE_MODULE
-from .models import AuditConfig, ConfigurationError, EnvironmentFrame, Issue
-from .paths import ROOT_OWNER
-from .texparse import (
+# 反斜杠在提示文本里出现多次，用常量避免转义噪音。
+BS = chr(92)
+
+# 入口解析与 page_workspace 共用一套候选，避免两处各写一份"入口叫什么"。
+_SCRIPTS_ROOT = Path(__file__).resolve().parent.parent
+if str(_SCRIPTS_ROOT) not in _sys.path:
+    _sys.path.insert(0, str(_SCRIPTS_ROOT))
+
+from page_workspace import resolve_entry  # noqa: E402
+
+from .defaults import (  # noqa: E402
+    ENVIRONMENT_NAME,
+    MODULE_FILENAME,
+    PAGE_LIKE_MODULE,
+)
+from .models import (  # noqa: E402
+    AuditConfig,
+    ConfigurationError,
+    EnvironmentFrame,
+    Issue,
+)
+from .paths import ROOT_OWNER  # noqa: E402
+from .texparse import (  # noqa: E402
     add_issue,
     consume_command_arguments,
     line_column,
@@ -247,7 +267,10 @@ def audit_source(
 
 def collect_pages(project: Path) -> list[Path]:
     latex = project / "latex"
-    main = latex / "main.tex"
+    try:
+        main = resolve_entry(project)
+    except FileNotFoundError as exc:
+        raise ConfigurationError(str(exc)) from exc
     if not main.is_file():
         raise ConfigurationError(f"缺少唯一入口: {main}")
     for section in ("front", "pages", "back"):
@@ -283,13 +306,13 @@ def collect_pages(project: Path) -> list[Path]:
         parts = Path(normalized).parts
         if len(parts) != 2 or parts[0] not in {"front", "back"}:
             raise ConfigurationError(
-                "main.tex 的前后置必须使用 \\input{front/TYPE} 或 \\input{back/TYPE}；"
-                "正文必须使用唯一的 \\bookinput 范围"
+                f"{main.name} 的前后置必须使用 " + BS + "input{front/TYPE} 或 "
+                + BS + "input{back/TYPE}；正文必须使用唯一的 " + BS + "bookinput 范围",
             )
         filename = parts[1] if parts[1].endswith(".tex") else f"{parts[1]}.tex"
         candidate = latex / parts[0] / filename
         if candidate.parent != latex / parts[0] or not candidate.is_file():
-            raise ConfigurationError(f"main.tex 引用的模块不存在或不是直接子级文件: {token}")
+            raise ConfigurationError(f"{main.name} 引用的模块不存在或不是直接子级文件: {token}")
         validate_module_filename(parts[0], candidate)
         if candidate in seen:
             raise ConfigurationError(f"main.tex 重复加载模块: {token}")
@@ -305,12 +328,12 @@ def collect_pages(project: Path) -> list[Path]:
         end = int(match.group(3))
         if start != 1 or end < start:
             raise ConfigurationError(
-                "main.tex 的正文必须以唯一的 \\bookinput{1}{N} 开始并保持有效范围"
+                f"{main.name} 的正文必须以唯一的 \\bookinput{{1}}{{N}} 开始并保持有效范围"
             )
         body_ranges.append((start, end))
 
     if len(body_ranges) != 1:
-        raise ConfigurationError("main.tex 必须包含且只包含一条 \\bookinput{1}{N}")
+        raise ConfigurationError(f"{main.name} 必须包含且只包含一条 \\bookinput{{1}}{{N}}")
     _, body_end = body_ranges[0]
     body_directory = latex / "pages"
     # 正文文件名宽度由类文件的 \bookinput 决定：三位起，超过三位就自然地变宽
@@ -346,7 +369,7 @@ def collect_pages(project: Path) -> list[Path]:
         missing = sorted(actual - referenced)
         if missing:
             raise ConfigurationError(
-                f"{section} 中存在未由 main.tex 导入的模块: "
+                f"{section} 中存在未由 {main.name} 导入的模块: "
                 + ", ".join(path.name for path in missing)
             )
     return ordered

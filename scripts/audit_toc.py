@@ -8,6 +8,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from page_workspace import resolve_entry  # noqa: E402
+
 
 AUTO_COMMAND = re.compile(r"\\bookmaketoc(?![A-Za-z@])")
 TOC_INPUT = re.compile(r"\\input\s*\{\s*front/toc(?:\.tex)?\s*\}")
@@ -54,9 +57,13 @@ def main() -> int:
     args = parse_args()
     project = args.project.resolve()
     toc_path = project / "latex" / "front" / "toc.tex"
-    main_path = project / "latex" / "main.tex"
+    try:
+        main_path = resolve_entry(project)
+    except FileNotFoundError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     if not toc_path.is_file() or not main_path.is_file():
-        print("缺少 latex/front/toc.tex 或 latex/main.tex。", file=sys.stderr)
+        print("缺少 latex/front/toc.tex 或入口文件。", file=sys.stderr)
         return 2
 
     try:
@@ -78,13 +85,13 @@ def main() -> int:
         )
     toc_inputs = TOC_INPUT.findall(main)
     if len(toc_inputs) != 1:
-        errors.append(f"main.tex 必须恰好导入一次 front/toc，实际为 {len(toc_inputs)} 次。")
+        errors.append(f"{main_path.name} 必须恰好导入一次 front/toc，实际为 {len(toc_inputs)} 次。")
 
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print("自动目录审计通过：toc.tex 一次 bookmaketoc，main.tex 一次 front/toc。")
+    print(f"自动目录审计通过：toc.tex 一次 bookmaketoc，{main_path.name} 一次 front/toc。")
     return 0
 
 

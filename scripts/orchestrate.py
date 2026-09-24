@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import json
 import subprocess
 import sys
@@ -70,20 +71,49 @@ def batch_id(start: int, end: int) -> str:
     return f"b{start:03d}-{end:03d}"
 
 
-def body_range(project: Path) -> tuple[int, int]:
-    """Return the body page range declared by the single \\bookinput."""
-    import re
+# 正文范围的两种等价写法：类文件的单命令形式，或逐条/范围加载接口。
+BODY_RANGE_PATTERNS = (
+    re.compile(r"\\bookinput\s*\{\s*(\d+)\s*\}\s*\{\s*(\d+)\s*\}"),
+    re.compile(r"\\bookinputpages\s*\{\s*(\d+)\s*\}\s*\{\s*(\d+)\s*\}"),
+)
 
-    main = project / "latex" / "main.tex"
-    if not main.is_file():
-        raise ConfigurationError(f"缺少唯一入口: {main}")
-    text = main.read_text(encoding="utf-8")
-    matches = re.findall(r"\\bookinput\s*\{\s*(\d+)\s*\}\s*\{\s*(\d+)\s*\}", text)
-    if len(matches) != 1:
-        raise ConfigurationError("main.tex 必须包含且只包含一条 \\bookinput{1}{N}")
-    start, end = (int(value) for value in matches[0])
+# 入口候选：单入口用 main.tex；形态 B 下做题本入口也能声明同一份正文范围。
+ENTRY_CANDIDATES = ("main.tex", "main-workbook.tex")
+
+def body_range(project: Path) -> tuple[int, int]:
+    """返回正文页范围，来源是任一声明了该范围的入口文件。
+
+    入口形态由用户选择（单入口 + 类文件开关，或独立做题本入口），正文范围的写法
+    也可能不同（``\\bookinput`` 或 ``\\bookinputpages``）。编排器只关心范围本身，
+    因此逐个入口、逐个写法去找那唯一一条声明，而不是绑定某个文件名或命令名。
+    """
+
+    latex_root = project / "latex"
+    found: list[tuple[Path, int, int]] = []
+    for name in ENTRY_CANDIDATES:
+        entry = latex_root / name
+        if not entry.is_file():
+            continue
+        text = entry.read_text(encoding="utf-8")
+        for pattern in BODY_RANGE_PATTERNS:
+            for match in pattern.finditer(text):
+                found.append((entry, int(match.group(1)), int(match.group(2))))
+
+    if not found:
+        candidates = "、".join(f"latex/{name}" for name in ENTRY_CANDIDATES)
+        raise ConfigurationError(
+            f"找不到正文范围声明；在 {candidates} 中应有一条 "
+            "\\bookinput{1}{N} 或 \\bookinputpages{1}{N}"
+        )
+    if len(found) > 1:
+        where = "、".join(sorted({path.name for path, _, _ in found}))
+        raise ConfigurationError(f"正文范围声明出现多次（{where}）；只能有一处")
+
+    entry, start, end = found[0]
     if start != 1 or end < start:
-        raise ConfigurationError("main.tex 的正文范围必须从 1 开始且有效")
+        raise ConfigurationError(
+            f"{entry.name} 的正文范围必须从 1 开始且有效，当前为 {start}-{end}"
+        )
     return start, end
 
 
