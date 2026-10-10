@@ -43,7 +43,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from page_workspace import control_dir  # noqa: E402
-from read_budget import BudgetError, charge_read  # noqa: E402
+from read_budget import BudgetConfigError, BudgetError, charge_read  # noqa: E402
 
 
 SECTIONS = ("front", "pages", "back")
@@ -229,7 +229,7 @@ def main() -> int:
     if args.reset_budget is not None:
         try:
             reset_page_budget(project, args.page, args.reset_budget)
-        except (UsageError, BudgetError) as exc:
+        except (UsageError, BudgetConfigError, BudgetError) as exc:
             print(str(exc), file=sys.stderr)
             return 2
         return 0

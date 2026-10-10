@@ -34,6 +34,7 @@ description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译�
 - 所有显示编号由 `.cls` 计数器产生，逐页源码不得硬编码例题号、习题号、定义号、公式号、图表号、步骤号。
   **判据：源码里不得出现编号字符本身**——小问的 `(1)`/`（1）`、选择题的 `A.`/`（B）`、圈码 `①`、题号「例 1.2」都必须由语义列表、选项命令或题目环境生成（写法见 [page-authoring.md](references/contract/page-authoring.md) 第 1.5 节）。
   实测这是违规最多的一条：agent 遇到小问和选择题容易直接手打标签，导致样式与原书不符、跨页续写重号、且无法交叉引用与筛选。
+- 选择题只允许一个页面级入口：`\bookchoices{选项一}{选项二}{选项三}{选项四}`。默认 `mode=auto` 按带标签的最宽选项选择固定四列、二二或竖排；原书已确认版式才使用 `mode=four|two|vertical|display|figure|graphics`，标签风格通过 `label=period|paren|cnparen` 设置。公式、矩阵使用 `mode=display,content=math` 且参数不带数学定界符；共享图文使用 `figure`，每项独立图形使用 `graphics`；`auto` 只接受可重复测量的字面内容，含任何 LaTeX 控制序列的选项必须改用固定模式；**选项标签**不得在页面源码写 `A`/`B`/`C`/`D`；解答正文中原书本来印出的“选项（D）”等引用属于内容，可以照录。当前公共接口按四选项题设计，三项/五项题必须登记缺口。自动布局校准时可临时使用 `trace=true` 查看编译日志，定稿前删除。
 - 目录和 PDF 书签必须由 `.cls` 集中管理：`latex/front/toc.tex` 只调用一次项目提供的 `\bookmaketoc` 自动目录指令，不得手写目录条目、页码或逐页 `\addcontentsline`；
   结构命令负责自动写入目录。
 - 前后置模块的书签以**原书实际拥有的模块**为准，不是固定清单：封面、前言、献词、目录、书末页等只要原件里有，就**必须**提取出来并各自成为顶层书签，指向该模块的实际第一页；
@@ -87,7 +88,7 @@ python -X utf8 scripts/crop_page.py <project> pages-013 tmp/z.png --region 0.08,
 - **先总览、再定位、后精读**。总览（`--overview`）只用来确定“哪一段有公式/表格/图”，随后只截那一块。不要把整页均分成十几条逐条读完——那是把上下文花在空白和已读内容上。
 - **按需取块，块数越少越好**。一页通常只需 1–3 块就能覆盖所有需要细看的内容；正文段落用 `body` 级清晰度就够，只有公式、角标、表格线、图形标注才需要更高清晰度。
 - **左右留 0.03 / 0.96**。正文常排到版心边沿，把 x 范围收到 0.09 会切掉行首字（实测「与」「所以」「该」「令」被切走），只能重裁、白烧额度。
-- **每页读图有硬预算**：默认 6 次（`--overview` 总览不计入）。裁剪即计数，由 `scripts/crop_page.py` 强制；超标会被拒绝并提示停下报告。实测有单元把一页裁成 20 多张，上下文烧光、任务中途崩溃，前面读的全白费——**超预算不是更仔细，是任务失败**。
+- **每页读图有硬预算**：默认 10 次（`--overview` 总览不计入），10 也是**最低额度**，调度者只能上调不能下调。裁剪即计数，由 `scripts/crop_page.py` 强制；超标会被拒绝并提示停下报告。实测有单元把一页裁成 20 多张，上下文烧光、任务中途崩溃，前面读的全白费——**超预算不是更仔细，是任务失败**。
 - **一轮只看少量图**：默认一次 1–2 张，读完再读下一张。需要扫很多页时先用结构化信号缩小范围（页数、`MediaBox`、墨迹密度、日志警告），只打开命中异常的那几页。
 - **不靠放大补清晰度**：`--scale` 大于 1 只是插值放大，会同时放大模糊，占更多上下文却不增加信息。低分辨率页图只能回到拆页阶段用更高 DPI 重出。
 - **裁图只写 `tmp/`**，脚本会拒绝写入交付树；裁图是临时视觉证据，用完即弃，不得拼成跨页蒙太奇。
@@ -198,6 +199,20 @@ python <skill>/scripts/split_pdf.py <project> <source.pdf> --image-source auto -
 它不表示最终 LaTeX 要导入整页图片。后续内容、公式、版式和图形仍必须由原生多模态能力分析后重新写成 LaTeX。脚本只检查图像对象和几何，不读取文字层。
 核对页数、像素尺寸、有效 DPI 和回退原因；这些信息只供当前阶段使用，最终不写入交付树。
 
+### 2.5 可选提取器探查（只产候选证据）
+
+页面拆分并完成页面分型后，才考虑 MinerU、Marker、Docling、Surya、PDF-Extract-Kit 或局部公式工具。先运行
+`scripts/probe_optional_tools.py`，再从目录页、普通正文、公式密集页、选择题页、图表页和疑难页中选少量代表页；不要把整本 PDF 或整页候选 Markdown 一次送入上下文。
+结构工具最多先选一个，必要时再对窄裁公式区域加一个公式候选工具。统一运行器只允许写入
+`tmp/tool-probes/`，默认有三重输出上限：单个候选文件 32 MiB、候选文件数 256、候选总量
+128 MiB；真实执行前会检查当前 CLI 的 `--help` 参数契约，任一上限超出或检查失败都停在候选层。
+manifest 会区分 `total_bytes_exceeded`、`oversized_file_count` 和被截断的超大文件明细；不要把
+完整候选目录原样塞进上下文，也不要因为只看到少量明细就误以为总量安全。运行器会在工具
+仍运行时轮询输出目录，达到任一上限就终止候选进程，并在 manifest 写入 `termination_reason`。
+工具输出只能提示区域、阅读顺序、公式或表格候选，最终文字、公式、选项标签、图形语义和
+样式必须回到原生多模态逐页证据。候选结果与源页冲突时记录冲突，不得直接写入 `.tex`、
+`.cls`、样式卡片或最终项目。
+
 ### 3. 页面修正
 
 按原件顺序逐页打开独立 PNG，逐页检查方向和页边界；不得拼接、缩略或跳过页面。忽略不影响阅读的小倾斜，不自动裁切或重采样：
@@ -280,7 +295,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 阅读 [style-cards.md](references/practice/style-cards.md)、[class-contract.md](references/contract/class-contract.md)、
 [latex-pitfalls.md](references/practice/latex-pitfalls.md) 和 [template/base.cls](template/base.cls)，
-在 `latex/` 从零实现项目 `.cls`，并同步填写 `docs/class-api.md` 与 `semantic-audit.json`。
+在 `latex/` 从零实现项目 `.cls`，并同步填写 `docs/class-api.md` 与 `semantic-audit.json`。选择题要先读 [choice-layout.md](references/practice/choice-layout.md)，把标签、计数器、列宽和自动/固定策略集中在 `.cls`，不要给每种页面变体另造命令。
 集中管理纸张、版心、字体、间距、页眉页脚、颜色、环境、计数器、内容视图、题目归属、跨页接口和媒体接口。
 每新增一个公共接口，先在 API 文档中锁定输入、输出、错误行为和命名契约，再实现并进行常规编译复核；环境、命令、计数器和标签键先通过英文 ASCII 标识检查。
 每个登记为可跨页的环境都要以单条 `\bookinput` 连续加载两个或更多页面的夹具验证单一 `\begin`/`\end`，并在完整书与隐藏视图各编译一次。
@@ -414,9 +429,9 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 |---|---|
 | 1-4 输入审计、拆页、修正、命名 | [practice/page-reading.md](references/practice/page-reading.md)、[contract/workbook-matrix.md](references/contract/workbook-matrix.md) |
 | 5 样式卡片 | [practice/style-extraction.md](references/practice/style-extraction.md)、[practice/style-cards.md](references/practice/style-cards.md) |
-| 6 样式实现 | [contract/class-contract.md](references/contract/class-contract.md)、[practice/latex-pitfalls.md](references/practice/latex-pitfalls.md)、[template/base.cls](template/base.cls) |
+| 6 样式实现 | [contract/class-contract.md](references/contract/class-contract.md)、[practice/choice-layout.md](references/practice/choice-layout.md)、[practice/latex-pitfalls.md](references/practice/latex-pitfalls.md)、[template/base.cls](template/base.cls) |
 | 7 样式复核 | [practice/latex-pitfalls.md](references/practice/latex-pitfalls.md)、[governance/review-checklist.md](references/governance/review-checklist.md) |
-| 8 逐页转写 | [practice/page-reading.md](references/practice/page-reading.md)、[contract/page-authoring.md](references/contract/page-authoring.md) |
+| 8 逐页转写 | [practice/page-reading.md](references/practice/page-reading.md)、[contract/page-authoring.md](references/contract/page-authoring.md)、[practice/choice-layout.md](references/practice/choice-layout.md) |
 | 9-10 矢量图 | [practice/figures-and-assets.md](references/practice/figures-and-assets.md) |
 | 11 全书复核 | [practice/pagination-and-navigation.md](references/practice/pagination-and-navigation.md)、[governance/review-checklist.md](references/governance/review-checklist.md) |
 | 12 矩阵构建 | [contract/workbook-matrix.md](references/contract/workbook-matrix.md)、[governance/decision-gates.md](references/governance/decision-gates.md) |
@@ -438,6 +453,8 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - [figures-and-assets.md](references/practice/figures-and-assets.md)：矢量图重建策略（含函数图、3D 图、树图）、书法题字描摹、资产组织与逐图收敛。
 - [pagination-and-navigation.md](references/practice/pagination-and-navigation.md)：页数漂移的定位与归因、目录排版约定、PDF 书签规则。
 - [latex-pitfalls.md](references/practice/latex-pitfalls.md)：字体字距、分页节奏、页眉页脚、图形绘制、公式编号、警告分类等回归陷阱。
+- [choice-layout.md](references/practice/choice-layout.md)：中文教材选择题的统一入口、自动布局边界、公式/图形特殊模式与视觉验收。
+- [extraction-toolchain.md](references/practice/extraction-toolchain.md)：MinerU 等可选提取器的探测、证据边界和冲突处理；外部工具不能替代原生多模态转写。
 
 ### 治理层 `references/governance/`
 
@@ -461,12 +478,15 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - `scripts/read_budget.py`：每页读图预算的账本与只读报告（`check`/`report`）。
 - `scripts/page_workspace.py`：拆页临时工作区（`extracted/`）路径解析。
 - `scripts/pdf_backend.py`：PyMuPDF 的单一导入入口（所有脚本共用，避免各自写 fallback）。
+- `scripts/probe_optional_tools.py`：只读探测本机可选 PDF/公式解析器的命令和 Python 包版本；包含 MinerU、Marker、Docling、Surya、PDF-Extract-Kit、Nougat 与局部公式工具；不读 PDF、不执行转换、不把外部结果写入正文。
+- `scripts/run_optional_extractor.py`：在明确页范围、超时和 `tmp/tool-probes/` 输出边界内运行已探测到的可选候选工具；真实运行先校验 CLI `--help` 契约，只生成候选证据清单，禁止把结果直接写入正文或 `.tex`。
 
 **质量门**
 
 - `scripts/audit_toc.py`：目录模块与自动目录指令的静态审计。
 - `scripts/audit_provenance.py`：正文来源页标记与前后置模块覆盖的静态审计。
 - `scripts/audit_hardcoded_numbers.py`：审计逐页源码里的成组字面编号（小问、选项、圈码）与手打题号/步骤号；这些编号必须由 `.cls` 生成。
+- `scripts/audit_choice_interfaces.py`：审计正文页是否绕过统一的 `\bookchoices` 入口，拦截参考项目旧选择题宏、手写选项标签和旧图形选择题接口。
 - `scripts/audit_semantics.py`：语义所有权、跨页环境结构与集中职责归属的静态审计。
 - `scripts/audit_pdf_outline.py`：按项目登记的前后置模块清单审计 PDF 顶层书签、顺序与非空目标页。
 - `scripts/audit_pdf_build.py`：成品 PDF 对象层审计；整页位图、答案哨兵泄漏与逐页纸型核对。

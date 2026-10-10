@@ -33,7 +33,10 @@ LEDGER_FILE = "read-budget.json"
 
 # 每页默认读图预算。含单元自己的探针图；4 条横带 + 1–2 张收窄补充刚好够用。
 # 这是硬上限：超预算不是"更仔细"，是任务失败。
-DEFAULT_LIMIT = 6
+DEFAULT_LIMIT = 10
+# 每页最低额度。任何页都不允许低于这个值：默认值即最低值，调度者只能上调。
+# 旧账本里残留的较小 limit 会在读取时被抬到 MIN_LIMIT，避免历史项目继续按低额度卡人。
+MIN_LIMIT = 10
 
 
 class BudgetError(RuntimeError):
@@ -42,6 +45,14 @@ class BudgetError(RuntimeError):
 
 class UsageError(RuntimeError):
     """输入不符合契约；退出码与其它脚本一致为 2。"""
+
+
+class BudgetConfigError(UsageError):
+    """预算配置被拒绝（例如试图把额度降到最低值以下）。
+
+    独立成一个子类，是为了让 `crop_page.py` 能捕获它，而不必把
+    自己内部的 `UsageError` 与预算模块的同名异常混为一谈。
+    """
 
 
 def ledger_path(project: Path) -> Path:
@@ -60,6 +71,12 @@ def load(project: Path) -> dict:
         raise BudgetError("读图账本顶层必须是对象")
     payload.setdefault("limit", DEFAULT_LIMIT)
     payload.setdefault("pages", {})
+    try:
+        limit = int(payload["limit"])
+    except (TypeError, ValueError) as exc:
+        raise BudgetError(f"读图账本的 limit 不是整数: {payload['limit']!r}") from exc
+    # 最低额度是硬下限：低于它的历史账本就地抬到 MIN_LIMIT。
+    payload["limit"] = max(MIN_LIMIT, limit)
     return payload
 
 
@@ -130,8 +147,10 @@ def charge_read(project: Path, page: str, image: Path) -> None:
 
 def set_limit(project: Path, page: str, limit: int) -> None:
     """由调度者显式提高某页上限。"""
-    if limit < 1:
-        raise UsageError("--reset-budget 必须是正整数")
+    if limit < MIN_LIMIT:
+        raise BudgetConfigError(
+            f"--reset-budget 不能低于最低额度 {MIN_LIMIT}（当前传入 {limit}）"
+        )
     payload = load(project)
     payload["limit"] = limit
     entry = payload["pages"].setdefault(page, {"count": 0, "images": []})
