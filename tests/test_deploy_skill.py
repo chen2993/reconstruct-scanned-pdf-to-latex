@@ -105,6 +105,14 @@ def test_default_targets_are_the_four_primary_runtimes(tool):
     assert tool.PRIMARY_RUNTIMES == ("codex", "claude", "dsh", "kimi")
 
 
+def test_safe_is_dir_skips_unreadable_optional_runtime(tool):
+    class Unreadable:
+        def is_dir(self):
+            raise PermissionError("denied")
+
+    assert tool.safe_is_dir(Unreadable()) is False
+
+
 def test_runtime_roots_use_each_tool_convention(tool):
     """每个运行时的技能根目录要按各自约定解析，不能一律套 skills/。"""
 

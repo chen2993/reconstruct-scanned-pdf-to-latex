@@ -44,6 +44,9 @@ def test_copies_toolchain_scripts(fresh):
         "audit_provenance.py",
         "audit_semantics.py",
         "orchestrate.py",
+        "probe_optional_tools.py",
+        "run_optional_extractor.py",
+        "audit_choice_interfaces.py",
     ):
         assert (fresh / "scripts" / name).is_file(), name
     assert (fresh / "scripts" / "semantics" / "sources.py").is_file()

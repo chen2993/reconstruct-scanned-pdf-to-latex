@@ -89,46 +89,31 @@
 
 ### 选择题选项
 
-**选项标签由类文件生成**，源码连 `A`/`B` 都不写。原书的选项排布有单行多列、二二网格、竖排等多种，**同一套内容需要按原书版式提供若干变体**——变体是 `.cls` 的命令，不是页面里的手排表格：
+选项统一使用项目类文件的 `\bookchoices`，页面源码只传四个选项内容，绝不手打 `A`、`B`、`C`、`D` 或括号标签：
 
 ```tex
-% .cls：定义一组版式变体，标签统一由计数器生成
-\newcounter{bookchoice}
-% 标签样式只在这一处切换：\bookchoiceentry 始终调用 \bookchoiceletter，
-% 想换成括号版只需 \let\bookchoiceletter\bookchoiceparenletter。
-\newcommand{\bookchoiceletter}{\stepcounter{bookchoice}\Alph{bookchoice}.\nobreak\hspace{.35em}}
-\newcommand{\bookchoiceparenletter}{\stepcounter{bookchoice}(\Alph{bookchoice})\nobreak\hspace{.35em}}
-\newcommand{\bookchoiceentry}[1]{\textup{\bookchoiceletter}#1}
-
-% 单行四列（常见）
-\newcommand{\bookchoicesfour}[4]{%
-  \par\begingroup\setcounter{bookchoice}{0}%
-  \noindent\begin{tabular}{@{}*4{>{\raggedright\arraybackslash}p{40mm}@{}}}
-    \bookchoiceentry{#1}&\bookchoiceentry{#2}&\bookchoiceentry{#3}&\bookchoiceentry{#4}%
-  \end{tabular}\par\endgroup}
-
-% 二二网格（选项较长或含公式）
-\newcommand{\bookchoicestwobytwo}[4]{%
-  \par\begingroup\setcounter{bookchoice}{0}%
-  \noindent\begin{tabular}{@{}>{\raggedright\arraybackslash}p{76mm}@{}>{\raggedright\arraybackslash}p{76mm}@{}}
-    \bookchoiceentry{#1}&\bookchoiceentry{#2}\\[1.4pt]
-    \bookchoiceentry{#3}&\bookchoiceentry{#4}%
-  \end{tabular}\par\endgroup}
+\bookchoices{选项一}{选项二}{选项三}{选项四}
 ```
+
+默认 `mode=auto` 先测量带标签的最宽选项，再在固定四列、二二和竖排之间选择。原书代表页已经证明版式时，显式锁定模式：
 
 ```tex
-% 页面源码：只给内容，不给标签
-\bookchoicesfour{$0$}{$-\infty$}{$+\infty$}{不存在但也不是 $\infty$}
+\bookchoices[mode=four]{...}{...}{...}{...}
+\bookchoices[mode=two]{...}{...}{...}{...}
+\bookchoices[mode=vertical]{...}{...}{...}{...}
+\bookchoices[mode=display,content=math]{...}{...}{...}{...}
+\bookchoices[mode=four,content=math]{...}{...}{...}{...}
+\bookchoices[mode=figure,figure={图形主体}]{...}{...}{...}{...}
+\bookchoices[mode=graphics]{图形一}{图形二}{图形三}{图形四}
 ```
 
-要点：
+标签风格通过 `label=period|paren|cnparen` 选择；不要为每种风格复制一套页面命令。公式、矩阵、图形或原书固定版式不得交给普通自动模式；`auto` 只接受不含 LaTeX 控制序列的可重复测量内容。数学内容可以与 `four`、`two`、`vertical` 或 `display` 固定模式组合；`display` 表示数学二二网格。页面源码不得传入列宽、间距、标签宽度或图形高度等校准键；这些值集中留在 `.cls`。完整决策表、图形选项和视觉验收见 [choice-layout.md](../practice/choice-layout.md)。
 
-- **每次进入选项组要重置选项计数器**（`\setcounter{bookchoice}{0}`），否则第二题会从 E 开始；
-- 标签形式（`A.` / `(A)` / `（A）`）由 `.cls` 定，可用一条 `\let` 切换风格，不必为每种风格复制命令；
-- **选项排布是原书事实**：单行四列、二二网格、竖排、含公式的显示式选项，都要按代表页量取列宽与间距，命名成变体；
-- 列宽用固定 `p{...}` 而不是内容驱动的 `X`／`\extracolsep`——后者会随公式宽度变化把后续选项整体推移，跨页时更明显；
-- 选项若含展示公式，用 `\displaystyle` 包裹（原书选项里的分式与求和通常是显示尺寸）；
-- **不要**用 `itemize` 加 `\item[A.]` 冒充选项：标签仍是手写的，且缩进/换行行为不受控。
+自动布局需要排查时可临时写 `trace=true`；它只在编译日志输出 `BOOKCHOICES` 决策，
+定稿源码应删除该键。`mode=display,content=math` 只负责显示公式选项的空间布局，不替页面源码
+添加或删除数学定界符；调用时必须写 `content=math`，四个选项传不带数学定界符的
+原始内容。`mode=graphics` 用于四个选项各自拥有一幅图，类文件会独立限宽/限高。
+当前接口按四选项题设计，三项或五项题必须先登记类文件扩展，不得用空参数伪造。
 
 ### 圈码与步骤
 

@@ -275,6 +275,14 @@ function Invoke-Job([object]$Job) {
             throw "手打编号审计失败: $($Job.JobName)"
         }
     }
+    # 选择题必须走项目类文件的统一入口，不能把参考项目的旧宏带入正文页。
+    $choiceScript = Join-Path $ProjectRoot 'scripts\audit_choice_interfaces.py'
+    if (Test-Path -LiteralPath $choiceScript -PathType Leaf) {
+        & python '-X' 'utf8' $choiceScript $ProjectRoot
+        if ($LASTEXITCODE -ne 0) {
+            throw "选择题接口审计失败: $($Job.JobName)"
+        }
+    }
     $tocHashes = @()
     $outlineHashes = @()
     Push-Location $LatexRoot

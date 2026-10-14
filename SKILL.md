@@ -1,6 +1,6 @@
 ---
 name: reconstruct-scanned-pdf-to-latex
-description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译、可交付的 LaTeX 项目。覆盖输入审计、页面分型、页面拆分、方向修正、前置页/正文/后置页命名、样式卡片、多页纸张确认、项目专用 .cls、语义指令与主题、分批逐页转写、多单元并行协作纪律、矢量图与思维导图、原书与例题/习题/全做题本构建、Git 检查点、多轮视觉复核和成品瘦身。只用原生多模态能力读取内容，禁止 OCR 和 PDF 文本提取。不适用于已有文字层 PDF 的普通阅读、编辑或转换任务。
+description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译、可交付的 LaTeX 项目。覆盖输入审计、页面分型、页面拆分、方向修正、前置页/正文/后置页命名、样式卡片、多页纸张确认、项目专用 .cls、语义指令与主题、分批逐页转写、多单元并行协作纪律、矢量图与思维导图、原书与例题/习题/全做题本构建、Git 检查点、多轮视觉复核和成品瘦身。推荐先用 MinerU 等本地解析器产出候选，再用原生多模态逐页核对定稿。不适用于已有文字层 PDF 的普通阅读、编辑或转换任务。
 ---
 
 # 联系页禁令（硬规则）
@@ -13,15 +13,15 @@ description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译�
 # 扫描教材重建 LaTeX
 
 本 skill 把扫描页当作视觉证据，最终产物必须是重新排版的 LaTeX，而不是整页图片的包装。确定性文件操作使用 `scripts/`；
-文字、公式、方向、样式和图形语义只能由运行环境的原生多模态能力判断。
+文字、公式、方向、样式和图形语义的**最终判据是逐页视觉证据**（原生多模态判读，或人工确认）。推荐先用 MinerU 等本地解析器批量产出候选，把人力集中在核对与排版上，而不是逐字誊抄。
 
 面向**中文教材**：正文多为中文，`template/base.cls` 以 `ctexbook` 为基类，字体、行距、标点挤压和页眉页脚都按中文排版处理。
 需要其它语言或引擎时，按项目实际情况替换基类与字体方案，但接口契约和审计规则不变。
 
 ## 硬性规则
 
-- 只使用运行环境原生多模态能力读取页面内容、判断方向、分析样式和核对结果；
-  严禁调用 Tesseract、PaddleOCR、OCRmyPDF、云端 OCR、PDF 文本提取或其他文字识别工具作为内容来源。
+- **推荐配合本地解析器提速**：优先用 MinerU（见 [extraction-toolchain.md](references/practice/extraction-toolchain.md) 与 `scripts/setup_mineru.py`）批量产出正文、公式、表格与阅读顺序候选，再逐页用原生多模态核对定稿。候选只是候选：**未经视觉复核的解析结果不得写入 `.tex`、`.cls`、样式卡片或 `docs/`**。
+- 允许的辅助来源：本地 MinerU、Marker、Docling、Surya、PDF-Extract-Kit 等文档解析器，以及 Pix2Text/Pix2TeX/Texify 等局部公式工具。禁止把**云端 OCR / 在线解析服务**当作正文来源（数据出境与可复现性问题），也禁止把任何解析输出直接当成最终内容。
 - 不修改源 PDF，不导入整页扫描图，不把参考工程的书名、字体、颜色、尺寸、页数或局部版式直接复制到新项目。
 - 页面拆分和旋转产生的中间文件只放临时目录，成功命名后清理；不保留中间页面副本、页面映射表或物理页记录。
 - 最终页面标识只有 `front-xxx`、`pages-xxx`、`back-xxx` 三类。需要保留视觉证据时使用同名 PNG；
@@ -66,7 +66,7 @@ description: 将扫描版或图片型教材 PDF 重建为可编辑、可编译�
 
 ## 读取页面的方式
 
-页面内容只能靠运行环境原生多模态能力读，所以“怎么把页面送到模型眼前”本身就是工作流的一部分。扫描页常见 4000×6000 px 量级，远大于读取的舒适尺寸，而图片读取会**按长边等比例缩小**。由此推出唯一一条关键判据：
+页面内容以逐页视觉判读为最终依据，抽取工具负责提前给出候选与区域提示；"怎么把页面送到模型眼前"仍是工作流的一部分。扫描页常见 4000×6000 px 量级，远大于读取的舒适尺寸，而图片读取会**按长边等比例缩小**。由此推出唯一一条关键判据：
 
 > **宽度决定清晰度。** 把页面切成更短的横带不会让公式变清楚——横带仍是整幅宽度，照样被缩小；只有把宽度截窄（`--region` 指定列范围）才能看清公式、角标和表格线。
 
@@ -172,6 +172,17 @@ project/
 python <skill>/scripts/init_project.py <project> --git
 ```
 
+**开工前第一件事：确认 OCR 策略并等待用户答复。** 初始化完成后、进入输入审计之前，先问用户是否允许使用 OCR / 文档解析工具（MinerU、Marker、Docling、Surya 或独立 OCR）。这是一个**阻塞式决策门**：问完必须停下等用户明确答复，不能自己默认、不能边问边干、也不能"先做一版看看"。
+
+提问要点（给候选、给依据、给建议，让用户一句话就能定）：
+
+- 说明两条路线的差别与代价：**只靠原生多模态逐页判读**（最稳，但整本教材慢、上下文消耗大）vs **配合本地解析器出候选再人工核对**（快得多，但候选必须逐页复核，且会额外占磁盘与算力）；
+- 说明解析器的**三种范围**，让用户按需选择：仅结构/定位候选、正文与公式候选、全量候选；
+- 说明限制：只使用**本地**工具，禁止云端 OCR / 在线解析服务；解析结果是候选，**不得直接写入最终 `.tex`**；
+- 给出建议默认值（例如"推荐允许本地 MinerU 出候选"），并说明未答复就停在这一步、不进入拆页。
+
+把用户的答复（允许/不允许、允许哪种工具、允许的范围）写进 `.reconstruct-scanned-pdf-to-latex/progress.md`，后续所有阶段以这条记录为准；用户没有明确允许时，一律按"只用原生多模态"执行。完整提问模板见 [decision-gates.md](references/governance/decision-gates.md) 第 1.5 节。
+
 脚本创建目录、控制文件、`docs/class-api.md` 和复核表，并把技能的 `scripts/`（含 `semantics/` 包）与 `template/` 复制进项目，使项目自带可运行的工具链。它**不**创建项目 `.cls`，也**不**在项目根生成成品 `build.ps1`——这两者都要按原书实现。检查 `git status --short` 后提交初始化检查点。
 
 Windows 上路径常含中文、空格和全角括号。这类路径不要塞进 `python -c "..."` 或 `-Command` 的单行字符串：引号与代码页会把参数截断或改写（实测会把中文名变成乱码并报“unrecognized arguments”）。稳妥做法是把命令写成脚本文件再执行，或先 `cd` 到项目目录、用相对路径和简短英文文件名传参。
@@ -196,13 +207,34 @@ python <skill>/scripts/split_pdf.py <project> <source.pdf> --image-source auto -
 ```
 
 若扫描 PDF 每页是完整嵌入页图，优先直接提取原始像素，不统一渲染、不重采样；复杂页才回退到指定 DPI 渲染。这里的“保留原像素”只针对临时视觉证据，避免为方向判断和样式分析额外损坏扫描质量；
-它不表示最终 LaTeX 要导入整页图片。后续内容、公式、版式和图形仍必须由原生多模态能力分析后重新写成 LaTeX。脚本只检查图像对象和几何，不读取文字层。
+它不表示最终 LaTeX 要导入整页图片。后续内容、公式、版式和图形仍必须经视觉复核后重新写成 LaTeX；解析器可以生成候选，但脚本审计本身只检查图像对象和几何，不读取文字层。
 核对页数、像素尺寸、有效 DPI 和回退原因；这些信息只供当前阶段使用，最终不写入交付树。
 
-### 2.5 可选提取器探查（只产候选证据）
+### 2.5 解析器候选（推荐提速路径，只产候选证据）
 
-页面拆分并完成页面分型后，才考虑 MinerU、Marker、Docling、Surya、PDF-Extract-Kit 或局部公式工具。先运行
-`scripts/probe_optional_tools.py`，再从目录页、普通正文、公式密集页、选择题页、图表页和疑难页中选少量代表页；不要把整本 PDF 或整页候选 Markdown 一次送入上下文。
+**前提：用户已按阶段 1 之前的 OCR 授权门明确允许。** 未获允许时跳过本节，全部走原生多模态逐页判读（见 [decision-gates.md](references/governance/decision-gates.md) 第 1.5 节）。
+
+获允许后，**推荐先用 MinerU 跑一遍候选**，把"逐字誊抄"换成"核对与排版"，能显著缩短整本书的工期。先确认环境：
+
+```powershell
+# 只读体检：找到的 MinerU、版本、模型是否就位（找不到时给出下一步命令）
+python <skill>/scripts/setup_mineru.py --status
+
+# 没装时的一次性安装（显式执行，不会自动触发；模型约 2 GB，全机共用）
+python <skill>/scripts/setup_mineru.py --install
+python <skill>/scripts/setup_mineru.py --download-models
+```
+
+安装后按少量代表页试跑，确认候选质量再决定是否扩大范围：
+
+```powershell
+# PowerShell 续行符是反引号；也可写成一行
+python -X utf8 scripts/run_optional_extractor.py <project> <source.pdf> --tool mineru --pages 12-14,18 --output tmp/tool-probes/mineru/p012-014-018
+```
+
+两个容易踩的坑：``--pages`` 必须显式给出（MinerU 默认只解析前 10 页；全书用 ``--all-pages``）；``mineru parse`` 是**服务客户端**，未起服务时会直接报 ``server_not_running``——运行器因此优先使用无状态、直接写文件的 ``mineru-kit parse``（同目录自动发现）。模型默认在 ``~/.mineru/models``，多个项目与虚拟环境共用，只下载一次。
+
+也可以先用 `scripts/probe_optional_tools.py` 检查 Marker、Docling、Surya、PDF-Extract-Kit 或局部公式工具。再从目录页、普通正文、公式密集页、选择题页、图表页和疑难页中选少量代表页；不要把整本 PDF 或整页候选 Markdown 一次送入上下文。
 结构工具最多先选一个，必要时再对窄裁公式区域加一个公式候选工具。统一运行器只允许写入
 `tmp/tool-probes/`，默认有三重输出上限：单个候选文件 32 MiB、候选文件数 256、候选总量
 128 MiB；真实执行前会检查当前 CLI 的 `--help` 参数契约，任一上限超出或检查失败都停在候选层。
@@ -210,7 +242,7 @@ manifest 会区分 `total_bytes_exceeded`、`oversized_file_count` 和被截断�
 完整候选目录原样塞进上下文，也不要因为只看到少量明细就误以为总量安全。运行器会在工具
 仍运行时轮询输出目录，达到任一上限就终止候选进程，并在 manifest 写入 `termination_reason`。
 工具输出只能提示区域、阅读顺序、公式或表格候选，最终文字、公式、选项标签、图形语义和
-样式必须回到原生多模态逐页证据。候选结果与源页冲突时记录冲突，不得直接写入 `.tex`、
+样式必须回到逐页视觉证据（原生多模态判读，或人工确认）。候选结果与源页冲突时记录冲突，不得直接写入 `.tex`、
 `.cls`、样式卡片或最终项目。
 
 ### 3. 页面修正
@@ -269,13 +301,13 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 ### 4.6 能力预检（开工前）
 
-开始转写前必须先确认运行环境具备**原生多模态读取**与**任务分派**两项能力，并把结论写进 `progress.md`。两件事都要分别确认：**我自己**能不能读图，**我要派的子代理**能不能读图。
+开始转写前必须先确认运行环境具备**原生多模态读取**与**任务分派**两项能力，并把结论写进 `progress.md`。两件事都要分别确认：**我自己**能不能读图，**我要派的子代理**能不能读图。同时记录 `scripts/setup_mineru.py --status` 的结果：MinerU 可用时按第 2.5 节先跑候选，读图预算就能花在核对上而不是从零誊抄。
 
 实测出现过**能力倒置**：主执行者调 `read_image` 返回「不支持视觉」，而派出的子代理能正常读图。此时**所有视觉工作（方向检查、页面分型、样式提取、转写、复核）都必须委托出去**，主执行者只做调度与验收。另外，派出的**下二级**代理可能被固定在无视觉路径上——不要让二级代理代读图片，那只会浪费往返。
 
 **先探针、再派发**：用 `tools/make_vision_probe.py` 生成一张内容已知的合成图（3 圆 / 2 三角 / 4 方 / 左上角 `V7K`），让待测方只回答一行可自动核对的结果；看不到就回「看不到」。这样能区分"看不到"与"看错"两种失败，比直接派真任务便宜得多——实测 528 次派发里有 441 次带探针。
 
-任一层都读不了图时，立即停下来告知用户（缺哪一项、卡在哪一页），请用户切换模型；禁止改用 OCR 或 PDF 文本层替代。判据、探针写法与单元提示词结构见 [subagent-orchestration.md](references/governance/subagent-orchestration.md) 第 0 节与 [dispatch-prompts.md](references/governance/dispatch-prompts.md) 第 0–0.7 节。
+任一层都读不了图时，立即停下来告知用户（缺哪一项、卡在哪一页），请用户切换模型；解析器候选不能替代视觉复核。判据、探针写法与单元提示词结构见 [subagent-orchestration.md](references/governance/subagent-orchestration.md) 第 0 节与 [dispatch-prompts.md](references/governance/dispatch-prompts.md) 第 0–0.7 节。
 
 ### 5. 样式总结与样式卡片
 
@@ -317,9 +349,9 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 
 ### 8. 内容按页实现
 
-每个并行单元通常负责连续 10 页，内部三轮：原生多模态转写、逐行内容复核、编译与版式复核。
+每个并行单元通常负责连续 10 页，内部三轮：转写（以逐页视觉判读为准，可配合 MinerU 等候选）、逐行内容复核、编译与版式复核。
 任务必须附当前样式摘要版本、每个可用样式卡片、该批页面分型（例如章节首页、普通正文、图表/公式页）及 `front-xxx`、`pages-xxx` 或 `back-xxx` 源页标识；
-不得复制代表页或发明局部样式。模型必须打开本页独立 PNG 读取内容，并同时查看上一页和下一页判断跨页承接关系；不用 OCR、不臆造原书没有的题号、结论或参考文字。
+不得复制代表页或发明局部样式。模型必须打开本页独立 PNG 复核内容，并同时查看上一页和下一页判断跨页承接关系；解析器候选可用，但不臆造原书没有的题号、结论或参考文字。
 批次边界落在开放的可跨页所有者内时，主执行者向下一单元交接该环境名、起始页面标识、样式卡片版本和嵌套层级；这是瞬时协作上下文，不写入物理页映射，也不得补造新的环境边界。
 发现缺样式、样式变体或无法表达的版式，立即在 `reviews/style-gaps.md` 报告并暂停该块；主执行者更新 `.cls` 后，通知所有相关单元重新读取新版本再继续。
 图形只登记稳定 ID 和占位，不在本阶段实现。批次按“转写—复核—验收”逐批推进，前一批未经主执行者确认不派下一批。
@@ -454,7 +486,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - [pagination-and-navigation.md](references/practice/pagination-and-navigation.md)：页数漂移的定位与归因、目录排版约定、PDF 书签规则。
 - [latex-pitfalls.md](references/practice/latex-pitfalls.md)：字体字距、分页节奏、页眉页脚、图形绘制、公式编号、警告分类等回归陷阱。
 - [choice-layout.md](references/practice/choice-layout.md)：中文教材选择题的统一入口、自动布局边界、公式/图形特殊模式与视觉验收。
-- [extraction-toolchain.md](references/practice/extraction-toolchain.md)：MinerU 等可选提取器的探测、证据边界和冲突处理；外部工具不能替代原生多模态转写。
+- [extraction-toolchain.md](references/practice/extraction-toolchain.md)：MinerU 等文档解析器的安装、探测、证据边界与冲突处理；解析器产出候选，最终内容仍须经视觉复核。
 
 ### 治理层 `references/governance/`
 
@@ -478,8 +510,10 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - `scripts/read_budget.py`：每页读图预算的账本与只读报告（`check`/`report`）。
 - `scripts/page_workspace.py`：拆页临时工作区（`extracted/`）路径解析。
 - `scripts/pdf_backend.py`：PyMuPDF 的单一导入入口（所有脚本共用，避免各自写 fallback）。
+- `scripts/setup_mineru.py`：MinerU 环境体检与一次性安装（`--status` / `--locate` / `--install` / `--download-models` / `--write-config`）；只读体检默认不装、不下载。
+- `scripts/mineru_env.py`：MinerU 可执行文件的统一发现顺序（显式参数 → 环境变量 → 项目配置 → `PATH` → 常见虚拟环境），供安装脚本与运行器共用。
 - `scripts/probe_optional_tools.py`：只读探测本机可选 PDF/公式解析器的命令和 Python 包版本；包含 MinerU、Marker、Docling、Surya、PDF-Extract-Kit、Nougat 与局部公式工具；不读 PDF、不执行转换、不把外部结果写入正文。
-- `scripts/run_optional_extractor.py`：在明确页范围、超时和 `tmp/tool-probes/` 输出边界内运行已探测到的可选候选工具；真实运行先校验 CLI `--help` 契约，只生成候选证据清单，禁止把结果直接写入正文或 `.tex`。
+- `scripts/run_optional_extractor.py`：在明确页范围、超时和 `tmp/tool-probes/` 输出边界内运行已探测到的候选工具（`--mineru-exe` 可显式指定 MinerU）；真实运行先校验 CLI `--help` 契约，只生成候选证据清单，禁止把结果直接写入正文或 `.tex`。
 
 **质量门**
 

@@ -44,7 +44,7 @@ GOOD_PAGE = f"""% Source page: pages-002
   {BS}item 求 $f(x)$ 的定义域；
   {BS}item 判断连续性。
 {BS}end{{booksubitems}}
-{BS}bookchoicesfour{{$0$}}{{$+{BS}infty$}}{{$-{BS}infty$}}{{不存在}}
+{BS}bookchoices{{$0$}}{{$+{BS}infty$}}{{$-{BS}infty$}}{{不存在}}
 {BS}end{{bookexample}}
 {BS}end{{bookbody}}
 """

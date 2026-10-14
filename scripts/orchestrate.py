@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """调度者工具：把正文拆成批次，生成单元任务包，校验批次产出。
 
-本脚本只做确定性的队列与校验；内容转写、样式判断和视觉复核仍由运行环境的
-原生多模态能力完成。用法::
+本脚本只做确定性的队列与校验；内容转写、样式判断和视觉复核由逐页视觉判读完成
+（可配合 MinerU 等解析器候选，但候选必须经视觉复核）。用法::
 
     python -X utf8 scripts/orchestrate.py <project> plan [--batch 10]
     python -X utf8 scripts/orchestrate.py <project> next
@@ -200,7 +200,7 @@ def task_packet(
         lines.append(f"  - `latex/pages/{identifier}.tex`")
     lines += [
         "- 只读输入: 本页独立 PNG；同时查看上一页与下一页判断跨页承接",
-        "- 禁止: OCR、PDF 文字层、联系页/拼接图、修改 `.cls`/`main.tex`/审计配置/样式卡片/Git",
+        "- 禁止: 联系页/拼接图、修改 `.cls`/`main.tex`/审计配置/样式卡片/Git；解析器候选可作参考，但内容以本页视觉判读为准",
         "",
         "## 页面分型",
         "",

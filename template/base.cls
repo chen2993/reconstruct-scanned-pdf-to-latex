@@ -35,6 +35,8 @@
 \LoadClass[UTF8,openany]{ctexbook}
 \RequirePackage{amsmath,amssymb}
 \RequirePackage{array}
+\RequirePackage{graphicx}
+\RequirePackage{keyval}
 \RequirePackage{enumitem}
 \RequirePackage{etoolbox}
 \RequirePackage{geometry}
@@ -506,41 +508,495 @@
 \newlist{bookromanitems}{enumerate}{1}
 \setlist[bookromanitems,1]{label=(\roman*), labelsep=0.5em, leftmargin=2.0em, itemsep=0.3ex}
 
-% Choice entries keep content and label separate: page sources pass option text
-% only.  One counter per group, reset on entry, so a second question restarts at A.
+% Choice groups have one public entry point.  Page sources pass option content
+% only; labels, counters, widths and layout decisions stay in this class.
+% The default mode measures the widest labelled option and selects a fixed
+% four-column, two-by-two, or vertical layout.  A confirmed source layout may
+% override that choice with mode=four|two|vertical|display|figure|graphics.
 \newcounter{bookchoice}
-% Label style is a single switch: \bookchoiceentry always calls
-% \bookchoiceletter, so a variant only has to \let that macro to another style.
-\newcommand{\bookchoiceletter}{\stepcounter{bookchoice}\Alph{bookchoice}.\nobreak\hspace{.35em}}
-\newcommand{\bookchoiceparenletter}{\stepcounter{bookchoice}(\Alph{bookchoice})\nobreak\hspace{.35em}}
-\newcommand{\bookchoiceentry}[1]{\textup{\bookchoiceletter}#1}
+\newlength{\bookchoicecolumnsep}
+\newlength{\bookchoicerowsep}
+\newlength{\bookchoiceinset}
+\newlength{\bookchoicefourwidth}
+\newlength{\bookchoicetwowidth}
+\newlength{\bookchoiceverticalwidth}
+\newlength{\bookchoicefiguretextwidth}
+\newlength{\bookchoicefigurewidth}
+\newlength{\bookchoicefiguregap}
+\newlength{\bookchoiceavailablewidth}
+\newlength{\bookchoicegraphicswidth}
+\newlength{\bookchoicegraphicmaxheight}
+\newlength{\bookchoicelabelwidth}
+\newlength{\bookchoicewidest}
+\newsavebox{\bookchoicemeasurebox}
+\newsavebox{\bookchoicefigurebox}
+\newsavebox{\bookchoicegraphicboxa}
+\newsavebox{\bookchoicegraphicboxb}
+\newsavebox{\bookchoicegraphicboxc}
+\newsavebox{\bookchoicegraphicboxd}
+\newsavebox{\bookchoicegraphicfitbox}
+\setlength{\bookchoicecolumnsep}{1.2em}
+\setlength{\bookchoicerowsep}{1.4pt}
+\setlength{\bookchoiceinset}{0pt}
+\setlength{\bookchoicefiguregap}{0pt}
+\setlength{\bookchoicegraphicmaxheight}{0pt}
+\setlength{\bookchoicelabelwidth}{2.2em}
 
-\newcommand{\bookchoicesfour}[4]{%
-  \par\begingroup\setcounter{bookchoice}{0}%
-  \noindent\begin{tabular}{@{}*4{>{\raggedright\arraybackslash}p{40mm}@{}}}
+\newcommand{\book@choice@labelstyle}{period}
+\newcommand{\book@choice@font}{\normalfont}
+\newcommand{\book@choice@figure}{}
+\newcommand{\book@choice@content}{text}
+\newcommand{\book@choice@content@user}{false}
+\newcommand{\book@choice@labelwidth@user}{false}
+\newcommand{\book@choice@figuregap@user}{false}
+\newcommand{\book@choice@graphicmaxheight@user}{false}
+\newcommand{\book@choice@trace}{false}
+\newcommand{\book@choice@wideststatus}{not-measured}
+\newcommand{\book@choice@valid}{true}
+\newcommand{\book@choice@mode@known}{false}
+\newcommand{\bookchoice@label}{%
+  \stepcounter{bookchoice}%
+  \ifdefstring{\book@choice@labelstyle}{period}{\mbox{\textup{\Alph{bookchoice}.}}}{%
+    \ifdefstring{\book@choice@labelstyle}{paren}{\mbox{\textup{(\Alph{bookchoice})}}}{%
+      \ifdefstring{\book@choice@labelstyle}{cnparen}{\mbox{（\Alph{bookchoice}）}}{%
+        \PackageError{base}{Unknown choice label style `\book@choice@labelstyle'}%
+          {Use period, paren, or cnparen.}%
+      }%
+    }%
+  }%
+  \nobreak\hspace{.35em}\ignorespaces
+}
+\newcommand{\bookchoice@previewlabel}{%
+  \ifdefstring{\book@choice@labelstyle}{period}{\mbox{\textup{D.}}}{%
+    \ifdefstring{\book@choice@labelstyle}{paren}{\mbox{\textup{(D)}}}{\mbox{（D）}}%
+  }%
+  \nobreak\hspace{.35em}\ignorespaces
+}
+\newcommand{\bookchoiceentry}[1]{%
+  \hangindent=\bookchoicelabelwidth
+  \hangafter=1
+  \book@choice@font\bookchoice@label
+  \ifdefstring{\book@choice@content}{text}{#1}{%
+    \ifdefstring{\book@choice@content}{math}{\ensuremath{\displaystyle #1}}{%
+      \PackageError{base}{Unknown choice content `\book@choice@content'}%
+        {Use text or math for text-based choice modes.}%
+    }%
+  }%
+}
+
+\define@key{bookchoices}{mode}{\def\book@choice@mode{#1}}
+\define@key{bookchoices}{label}{\def\book@choice@labelstyle{#1}}
+\define@key{bookchoices}{content}{%
+  \def\book@choice@content{#1}%
+  \def\book@choice@content@user{true}%
+}
+\define@key{bookchoices}{figure}{\def\book@choice@figure{#1}}
+\define@key{bookchoices}{column-sep}{\setlength{\bookchoicecolumnsep}{#1}}
+\define@key{bookchoices}{row-sep}{\setlength{\bookchoicerowsep}{#1}}
+\define@key{bookchoices}{inset}{\setlength{\bookchoiceinset}{#1}}
+\define@key{bookchoices}{figure-gap}{%
+  \setlength{\bookchoicefiguregap}{#1}%
+  \def\book@choice@figuregap@user{true}%
+}
+\define@key{bookchoices}{graphic-max-height}{%
+  \setlength{\bookchoicegraphicmaxheight}{#1}%
+  \def\book@choice@graphicmaxheight@user{true}%
+}
+\define@key{bookchoices}{label-width}{%
+  \setlength{\bookchoicelabelwidth}{#1}%
+  \def\book@choice@labelwidth@user{true}%
+}
+\define@key{bookchoices}{trace}{\def\book@choice@trace{#1}}
+\newcommand{\book@choice@defaults}{%
+  \def\book@choice@mode{auto}%
+  \def\book@choice@labelstyle{period}%
+  \def\book@choice@content{text}%
+  \def\book@choice@content@user{false}%
+  \def\book@choice@font{\normalfont}%
+  \def\book@choice@figure{}%
+  \def\book@choice@labelwidth@user{false}%
+  \def\book@choice@figuregap@user{false}%
+  \def\book@choice@graphicmaxheight@user{false}%
+  \def\book@choice@trace{false}%
+  \def\book@choice@wideststatus{not-measured}%
+  \def\book@choice@valid{true}%
+  \def\book@choice@mode@known{false}%
+}
+\newcommand{\book@choice@preparelabelwidth}{%
+  \ifdefstring{\book@choice@labelwidth@user}{false}{%
+    \sbox{\bookchoicemeasurebox}{\bookchoice@previewlabel}%
+    \setlength{\bookchoicelabelwidth}{\wd\bookchoicemeasurebox}%
+  }{}%
+}
+\newcommand{\book@choice@preparewidths}{%
+  \book@choice@preparelabelwidth
+  \setlength{\bookchoiceavailablewidth}{\linewidth}%
+  \addtolength{\bookchoiceavailablewidth}{-\bookchoiceinset}%
+  \ifdefstring{\book@choice@figuregap@user}{false}{%
+    \setlength{\bookchoicefiguregap}{.04\bookchoiceavailablewidth}%
+  }{}%
+  \setlength{\bookchoicefigurewidth}{.28\bookchoiceavailablewidth}%
+  \setlength{\bookchoicefiguretextwidth}{\bookchoiceavailablewidth}%
+  \addtolength{\bookchoicefiguretextwidth}{-\bookchoicefigurewidth}%
+  \addtolength{\bookchoicefiguretextwidth}{-\bookchoicefiguregap}%
+  \ifdim\bookchoicefiguretextwidth<0pt
+    \PackageError{base}{Choice figure widths exceed the available line width}%
+      {Reduce figure-gap or use another choice mode.}%
+    \setlength{\bookchoicefiguretextwidth}{\bookchoiceavailablewidth}%
+    \setlength{\bookchoicefiguregap}{0pt}%
+    \setlength{\bookchoicefigurewidth}{0pt}%
+  \fi
+  \setlength{\bookchoicefourwidth}{\bookchoiceavailablewidth}%
+  \addtolength{\bookchoicefourwidth}{-3\bookchoicecolumnsep}%
+  \divide\bookchoicefourwidth by 4\relax
+  \setlength{\bookchoicetwowidth}{\bookchoiceavailablewidth}%
+  \addtolength{\bookchoicetwowidth}{-\bookchoicecolumnsep}%
+  \divide\bookchoicetwowidth by 2\relax
+  \setlength{\bookchoiceverticalwidth}{\bookchoiceavailablewidth}%
+  \setlength{\bookchoicegraphicswidth}{\bookchoicefourwidth}%
+  \ifdefstring{\book@choice@graphicmaxheight@user}{false}{%
+    \setlength{\bookchoicegraphicmaxheight}{.18\textheight}%
+  }{}%
+}
+\newcommand{\book@choice@measure}[1]{%
+  \sbox{\bookchoicemeasurebox}{\strut\bookchoice@previewlabel #1}%
+  \ifdim\wd\bookchoicemeasurebox>\bookchoicewidest
+    \setlength{\bookchoicewidest}{\wd\bookchoicemeasurebox}%
+  \fi
+}
+\newcommand{\book@choice@resolveauto}[4]{%
+  \book@choice@preparewidths
+  \setlength{\bookchoicewidest}{0pt}%
+  \book@choice@measure{#1}%
+  \book@choice@measure{#2}%
+  \book@choice@measure{#3}%
+  \book@choice@measure{#4}%
+  \def\book@choice@wideststatus{measured}%
+  \ifdim\bookchoicewidest>\bookchoicefourwidth
+    \ifdim\bookchoicewidest>\bookchoicetwowidth
+      \def\book@choice@mode{vertical}%
+    \else
+      \def\book@choice@mode{two}%
+    \fi
+  \else
+    \def\book@choice@mode{four}%
+  \fi
+}
+\newcommand{\book@choice@begin}{%
+  \par\addvspace{.35em}\begingroup
+  \setcounter{bookchoice}{0}%
+  \setlength{\tabcolsep}{0pt}%
+  \book@choice@preparewidths
+}
+\newcommand{\book@choice@end}{\par\endgroup}
+\newcommand{\book@choice@traceoutput}{%
+  \ifdefstring{\book@choice@trace}{true}{%
+    % Keep each diagnostic line short enough for TeX's log writer to preserve
+    % key=value tokens without wrapping them in the middle of a field.
+    \typeout{BOOKCHOICES\space mode=\book@choice@mode\space label=\book@choice@labelstyle\space content=\book@choice@content}%
+    \typeout{BOOKCHOICES\space widest-status=\book@choice@wideststatus\space widest=\the\bookchoicewidest}%
+    \typeout{BOOKCHOICES\space widths\space four=\the\bookchoicefourwidth\space two=\the\bookchoicetwowidth\space vertical=\the\bookchoiceverticalwidth}%
+  }{}%
+}
+\newcommand{\book@choice@renderfour}[4]{%
+  \book@choice@begin
+  \noindent\hspace*{\bookchoiceinset}%
+  \begin{tabular}[t]{@{}>{\raggedright\arraybackslash}p{\bookchoicefourwidth}@{\hspace{\bookchoicecolumnsep}}>{\raggedright\arraybackslash}p{\bookchoicefourwidth}@{\hspace{\bookchoicecolumnsep}}>{\raggedright\arraybackslash}p{\bookchoicefourwidth}@{\hspace{\bookchoicecolumnsep}}>{\raggedright\arraybackslash}p{\bookchoicefourwidth}@{}}%
     \bookchoiceentry{#1}&\bookchoiceentry{#2}&\bookchoiceentry{#3}&\bookchoiceentry{#4}%
-  \end{tabular}\par\endgroup}
-\newcommand{\bookchoicestwobytwo}[4]{%
-  \par\begingroup\setcounter{bookchoice}{0}%
-  \noindent\begin{tabular}{@{}>{\raggedright\arraybackslash}p{76mm}@{}>{\raggedright\arraybackslash}p{76mm}@{}}
-    \bookchoiceentry{#1}&\bookchoiceentry{#2}\\[1.4pt]
+  \end{tabular}%
+  \book@choice@end
+}
+\newcommand{\book@choice@rendertwo}[4]{%
+  \book@choice@begin
+  \noindent\hspace*{\bookchoiceinset}%
+  \begin{tabular}[t]{@{}>{\raggedright\arraybackslash}p{\bookchoicetwowidth}@{\hspace{\bookchoicecolumnsep}}>{\raggedright\arraybackslash}p{\bookchoicetwowidth}@{}}%
+    \bookchoiceentry{#1}&\bookchoiceentry{#2}\\[\bookchoicerowsep]
     \bookchoiceentry{#3}&\bookchoiceentry{#4}%
-  \end{tabular}\par\endgroup}
-\newcommand{\bookchoicesvertical}[4]{%
-  \par\begingroup\setcounter{bookchoice}{0}%
-  \noindent\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.92\linewidth}@{}}
-    \bookchoiceentry{#1}\\
-    \bookchoiceentry{#2}\\
-    \bookchoiceentry{#3}\\
-    \bookchoiceentry{#4}%
-  \end{tabular}\par\endgroup}
-\newcommand{\bookchoicesparen}[4]{%
-  \par\begingroup\setcounter{bookchoice}{0}%
-  \let\bookchoiceletter\bookchoiceparenletter
-  \noindent\begin{tabular}{@{}*4{>{\raggedright\arraybackslash}p{40mm}@{}}}
-    \bookchoiceentry{#1}&\bookchoiceentry{#2}&%
-    \bookchoiceentry{#3}&\bookchoiceentry{#4}%
-  \end{tabular}\par\endgroup}
+  \end{tabular}%
+  \book@choice@end
+}
+\newcommand{\book@choice@rendervertical}[4]{%
+  \book@choice@begin
+  \begingroup
+    \setlength{\leftskip}{\bookchoiceinset}%
+    \setlength{\rightskip}{0pt}%
+    \noindent\bookchoiceentry{#1}\par\addvspace{\bookchoicerowsep}%
+    \noindent\bookchoiceentry{#2}\par\addvspace{\bookchoicerowsep}%
+    \noindent\bookchoiceentry{#3}\par\addvspace{\bookchoicerowsep}%
+    \noindent\bookchoiceentry{#4}\par
+  \endgroup
+  \book@choice@end
+}
+\newcommand{\book@choice@fitgraphic}[1]{%
+  % Apply the width cap first, then inspect the scaled box again before
+  % applying the height cap.  A single conditional cannot enforce both caps:
+  % a wide and tall option may violate the other bound after its first resize.
+  \sbox{\bookchoicegraphicfitbox}{\usebox{#1}}%
+  \ifdim\wd\bookchoicegraphicfitbox>\linewidth
+    \sbox{\bookchoicegraphicfitbox}{%
+      \resizebox{\linewidth}{!}{\usebox{\bookchoicegraphicfitbox}}}%
+  \fi
+  \ifdim\dimexpr\ht\bookchoicegraphicfitbox+\dp\bookchoicegraphicfitbox\relax>\bookchoicegraphicmaxheight
+    \sbox{\bookchoicegraphicfitbox}{%
+      \resizebox{!}{\bookchoicegraphicmaxheight}{\usebox{\bookchoicegraphicfitbox}}}%
+  \fi
+  \usebox{\bookchoicegraphicfitbox}%
+}
+\newcommand{\bookchoicegraphicentry}[2]{%
+  \book@choice@font\bookchoice@label\par
+  \centering
+  \sbox{#1}{#2}%
+  \book@choice@fitgraphic{#1}%
+}
+\newcommand{\book@choice@rendergraphics}[4]{%
+  \book@choice@begin
+  \noindent\hspace*{\bookchoiceinset}%
+  \begin{tabular}[t]{@{}>{\raggedright\arraybackslash}p{\bookchoicegraphicswidth}@{\hspace{\bookchoicecolumnsep}}>{\raggedright\arraybackslash}p{\bookchoicegraphicswidth}@{\hspace{\bookchoicecolumnsep}}>{\raggedright\arraybackslash}p{\bookchoicegraphicswidth}@{\hspace{\bookchoicecolumnsep}}>{\raggedright\arraybackslash}p{\bookchoicegraphicswidth}@{}}%
+    \bookchoicegraphicentry{\bookchoicegraphicboxa}{#1}&%
+    \bookchoicegraphicentry{\bookchoicegraphicboxb}{#2}&%
+    \bookchoicegraphicentry{\bookchoicegraphicboxc}{#3}&%
+    \bookchoicegraphicentry{\bookchoicegraphicboxd}{#4}%
+  \end{tabular}%
+  \book@choice@end
+}
+\newcommand{\book@choice@renderfigure}[4]{%
+  \ifx\book@choice@figure\@empty
+    \PackageError{base}{Choice figure mode requires figure=...}%
+      {Pass the figure body with the figure key or use another mode.}%
+  \else
+    \book@choice@preparewidths
+    \par\addvspace{.35em}\begingroup
+    \setcounter{bookchoice}{0}%
+    \noindent\hspace*{\bookchoiceinset}%
+    \begin{minipage}[t]{\bookchoicefiguretextwidth}\vspace{0pt}%
+      \setlength{\bookchoicetwowidth}{\linewidth}%
+      \addtolength{\bookchoicetwowidth}{-\bookchoicecolumnsep}%
+      \divide\bookchoicetwowidth by 2\relax
+      \setlength{\tabcolsep}{0pt}%
+      \begin{tabular}[t]{@{}>{\raggedright\arraybackslash}p{\bookchoicetwowidth}@{\hspace{\bookchoicecolumnsep}}>{\raggedright\arraybackslash}p{\bookchoicetwowidth}@{}}%
+        \bookchoiceentry{#1}&\bookchoiceentry{#2}\\[\bookchoicerowsep]
+        \bookchoiceentry{#3}&\bookchoiceentry{#4}%
+      \end{tabular}%
+    \end{minipage}\hspace*{\bookchoicefiguregap}%
+    \begin{minipage}[t]{\bookchoicefigurewidth}\vspace{0pt}\centering
+      \sbox{\bookchoicefigurebox}{\book@choice@figure}%
+      \book@choice@fitgraphic{\bookchoicefigurebox}%
+    \end{minipage}%
+    \par\endgroup
+  \fi
+}
+\newcommand{\book@choice@invalid}[2]{%
+  \def\book@choice@valid{false}%
+  \PackageError{base}{#1}{#2}%
+}
+\ExplSyntaxOn
+\bool_new:N \l_book_choice_auto_safe_bool
+\cs_new_protected:Npn \book_choice_check_auto:n #1
+  {
+    \bool_set_true:N \l_book_choice_auto_safe_bool
+    \tl_set:Nn \l_tmpa_tl {#1}
+    \tl_map_inline:Nn \l_tmpa_tl
+      {
+        \token_if_cs:NT ##1
+          {\bool_set_false:N \l_book_choice_auto_safe_bool}
+      }
+    \bool_if:NF \l_book_choice_auto_safe_bool
+      {
+        \book@choice@invalid
+          {Choice auto mode only accepts literal, repeatable option content}
+          {Use a fixed mode for macros, formulas, matrices, or graphics so the option is not measured twice.}
+      }
+  }
+\cs_new_eq:NN \book@choice@checkauto \book_choice_check_auto:n
+\ExplSyntaxOff
+\newcommand{\book@choice@checkgraphicheight}{%
+  \ifdim\bookchoicegraphicmaxheight<1sp
+    \book@choice@invalid{Choice graphic-max-height is not positive}%
+      {Use a positive graphic-max-height value.}%
+  \fi
+}
+\newcommand{\book@choice@requirecontent}[2]{%
+  \if\relax\detokenize{#2}\relax
+    \book@choice@invalid{Choice option #1 is empty}%
+      {Do not use an empty placeholder to imitate a three- or five-option question; extend the class API first.}%
+  \else
+    % Expand only in a protected definition.  This catches an explicitly empty
+    % user macro without executing it as page content; robust graphics/math
+    % commands remain protected tokens for their later fixed-mode render.
+    \begingroup
+      \protected@edef\book@choice@expanded{#2}%
+      \if\relax\detokenize\expandafter{\book@choice@expanded}\relax
+        \endgroup
+        \book@choice@invalid{Choice option #1 expands to empty}%
+          {Do not use an empty macro as a placeholder; extend the class API for this option count.}%
+      \else
+        \endgroup
+      \fi
+  \fi
+}
+\newcommand{\book@choice@validate}[4]{%
+  \ifdefstring{\book@choice@mode}{graphics}{%
+    \ifdefstring{\book@choice@content@user}{false}{\def\book@choice@content{graphic}}{%
+      \ifdefstring{\book@choice@content}{graphic}{}{%
+        \book@choice@invalid{Choice graphics mode requires content=graphic}%
+          {Omit content to use the graphic default, or pass content=graphic explicitly.}%
+      }%
+    }%
+  }{}%
+  \book@choice@requirecontent{A}{#1}%
+  \book@choice@requirecontent{B}{#2}%
+  \book@choice@requirecontent{C}{#3}%
+  \book@choice@requirecontent{D}{#4}%
+  \ifdefstring{\book@choice@mode}{auto}{%
+    \def\book@choice@mode@known{true}%
+    \ifdefstring{\book@choice@content}{text}{}{%
+      \book@choice@invalid{Choice auto mode only accepts text content}%
+        {Use a fixed text layout, or use mode=display with content=math for formulas.}%
+    }%
+    \book@choice@checkauto{#1}%
+    \book@choice@checkauto{#2}%
+    \book@choice@checkauto{#3}%
+    \book@choice@checkauto{#4}%
+  }{}%
+  \ifdefstring{\book@choice@mode}{four}{\def\book@choice@mode@known{true}}{}%
+  \ifdefstring{\book@choice@mode}{two}{\def\book@choice@mode@known{true}}{}%
+  \ifdefstring{\book@choice@mode}{vertical}{\def\book@choice@mode@known{true}}{}%
+  \ifdefstring{\book@choice@mode}{display}{\def\book@choice@mode@known{true}}{}%
+  \ifdefstring{\book@choice@mode}{figure}{\def\book@choice@mode@known{true}}{}%
+  \ifdefstring{\book@choice@mode}{graphics}{\def\book@choice@mode@known{true}}{}%
+  \ifdefstring{\book@choice@mode@known}{false}{%
+    \book@choice@invalid{Unknown choice mode `\book@choice@mode'}%
+      {Use auto, four, two, vertical, display, figure, or graphics.}%
+  }{}%
+  \ifdefstring{\book@choice@labelstyle}{period}{}{%
+    \ifdefstring{\book@choice@labelstyle}{paren}{}{%
+      \ifdefstring{\book@choice@labelstyle}{cnparen}{}{%
+        \book@choice@invalid{Unknown choice label style `\book@choice@labelstyle'}%
+          {Use period, paren, or cnparen.}%
+      }%
+    }%
+  }%
+  \ifdefstring{\book@choice@content}{text}{}{%
+    \ifdefstring{\book@choice@content}{math}{}{%
+      \ifdefstring{\book@choice@content}{graphic}{}{%
+        \book@choice@invalid{Unknown choice content `\book@choice@content'}%
+          {Use text, math, or graphic.}%
+      }%
+    }%
+  }%
+  \ifdefstring{\book@choice@mode}{display}{%
+    \ifdefstring{\book@choice@content}{math}{}{%
+      \book@choice@invalid{Choice display mode requires content=math}%
+        {Pass raw math content and use content=math; do not add math delimiters.}%
+    }%
+  }{}%
+  \ifdefstring{\book@choice@content}{math}{%
+    \ifdefstring{\book@choice@mode}{auto}{%
+      \book@choice@invalid{Math choice content cannot use auto mode}%
+        {Use mode=four, mode=two, mode=vertical, or mode=display with content=math.}%
+    }{}%
+    \ifdefstring{\book@choice@mode}{figure}{%
+      \book@choice@invalid{Math choice content cannot use figure mode}%
+        {Use a text choice group with figure=..., or use a fixed math mode.}%
+    }{}%
+    \ifdefstring{\book@choice@mode}{graphics}{%
+      \book@choice@invalid{Math choice content cannot use graphics mode}%
+        {Use mode=four, mode=two, mode=vertical, or mode=display with content=math.}%
+    }{}%
+  }{}%
+  \ifdefstring{\book@choice@content}{graphic}{%
+    \ifdefstring{\book@choice@mode}{graphics}{}{%
+      \book@choice@invalid{Graphic choice content requires mode=graphics}%
+        {Use mode=graphics and pass one graphic body per option.}%
+    }%
+  }{}%
+  \ifdefstring{\book@choice@mode}{figure}{%
+    \ifx\book@choice@figure\@empty
+      \book@choice@invalid{Choice figure mode requires figure=...}%
+        {Pass the shared figure body with the figure key or use another mode.}%
+    \fi
+  }{}%
+  \ifdim\bookchoiceavailablewidth<1sp
+    \book@choice@invalid{Choice available width is not positive}%
+      {Reduce inset or choose a valid paper and body width.}%
+  \fi
+  \ifdim\bookchoicefourwidth<1sp
+    \book@choice@invalid{Choice four-column width is not positive}%
+      {Reduce column-sep or increase the available line width.}%
+  \fi
+  \ifdim\bookchoicetwowidth<1sp
+    \book@choice@invalid{Choice two-column width is not positive}%
+      {Reduce column-sep or increase the available line width.}%
+  \fi
+  \ifdim\bookchoicelabelwidth<1sp
+    \book@choice@invalid{Choice label width is not positive}%
+      {Use a positive label-width value.}%
+  \fi
+  \ifdim\bookchoicecolumnsep<0pt
+    \book@choice@invalid{Choice column-sep cannot be negative}%
+      {Use a non-negative column-sep value.}%
+  \fi
+  \ifdim\bookchoicerowsep<0pt
+    \book@choice@invalid{Choice row-sep cannot be negative}%
+      {Use a non-negative row-sep value.}%
+  \fi
+  \ifdim\bookchoiceinset<0pt
+    \book@choice@invalid{Choice inset cannot be negative}%
+      {Use a non-negative inset value.}%
+  \fi
+  \ifdim\bookchoicefiguregap<0pt
+    \book@choice@invalid{Choice figure-gap cannot be negative}%
+      {Use a non-negative figure-gap value.}%
+  \fi
+  \ifdefstring{\book@choice@mode}{figure}{%
+    \ifdim\bookchoicefiguretextwidth<1sp
+      \book@choice@invalid{Choice figure text width is not positive}%
+        {Reduce figure-gap or figure width.}%
+    \fi
+    \ifdim\bookchoicefigurewidth<1sp
+      \book@choice@invalid{Choice figure width is not positive}%
+        {Reduce figure-gap or choose a wider body.}%
+    \fi
+    \book@choice@checkgraphicheight
+  }{}%
+  \ifdefstring{\book@choice@mode}{graphics}{%
+    \ifdim\bookchoicegraphicswidth<1sp
+      \book@choice@invalid{Choice graphics cell width is not positive}%
+        {Reduce column-sep or increase the available line width.}%
+    \fi
+    \book@choice@checkgraphicheight
+  }{}%
+}
+\newcommand{\book@choice@render}[4]{%
+  \book@choice@preparewidths
+  \ifdefstring{\book@choice@mode}{auto}{\book@choice@resolveauto{#1}{#2}{#3}{#4}}{}%
+  \book@choice@traceoutput
+  \ifdefstring{\book@choice@mode}{four}{\book@choice@renderfour{#1}{#2}{#3}{#4}}{%
+    \ifdefstring{\book@choice@mode}{two}{\book@choice@rendertwo{#1}{#2}{#3}{#4}}{%
+      \ifdefstring{\book@choice@mode}{vertical}{\book@choice@rendervertical{#1}{#2}{#3}{#4}}{%
+        \ifdefstring{\book@choice@mode}{display}{\book@choice@rendertwo{#1}{#2}{#3}{#4}}{%
+          \ifdefstring{\book@choice@mode}{figure}{\book@choice@renderfigure{#1}{#2}{#3}{#4}}{%
+            \ifdefstring{\book@choice@mode}{graphics}{\book@choice@rendergraphics{#1}{#2}{#3}{#4}}{%
+              \PackageError{base}{Unknown choice mode `\book@choice@mode'}%
+                {Use auto, four, two, vertical, display, figure, or graphics.}%
+            }%
+          }%
+        }%
+      }%
+    }%
+  }%
+}
+\newcommand{\bookchoices}[5][mode=auto]{%
+  \begingroup
+  \book@choice@defaults
+  \setkeys{bookchoices}{#1}%
+  \book@choice@preparewidths
+  \book@choice@validate{#2}{#3}{#4}{#5}%
+  \ifdefstring{\book@choice@valid}{true}{%
+    \book@choice@render{#2}{#3}{#4}{#5}%
+  }{}%
+  \endgroup
+}
 \newcommand{\bookcircled}[1]{\textcircled{\scriptsize #1}}
 \newcounter{bookcircleditem}
 \newcommand{\bookcircleditemnext}{\stepcounter{bookcircleditem}\bookcircled{\arabic{bookcircleditem}}}

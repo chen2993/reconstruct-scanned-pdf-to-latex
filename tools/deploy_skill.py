@@ -78,7 +78,7 @@ def runtime_roots() -> list[tuple[str, Path, str]]:
     ready: list[tuple[str, Path, str]] = []
     for name, root, note in candidates:
         tool_home = root.parent
-        if root.is_dir() or tool_home.is_dir():
+        if safe_is_dir(root) or safe_is_dir(tool_home):
             ready.append((name, root, note))
     return ready
 
@@ -88,6 +88,14 @@ def is_link(path: Path) -> bool:
         return True
     is_junction = getattr(path, "is_junction", None)
     return bool(is_junction and is_junction())
+
+
+def safe_is_dir(path: Path) -> bool:
+    """无权限或断开的可选运行时目录按不可用处理，不阻断主运行时探测。"""
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
 
 
 def link_target(path: Path) -> Path | None:
