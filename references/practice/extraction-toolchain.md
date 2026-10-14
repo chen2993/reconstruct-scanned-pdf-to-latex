@@ -2,6 +2,8 @@
 
 > **前置条件（阻塞式）**：使用本节任何工具之前，必须先按 [decision-gates.md](../governance/decision-gates.md) 第 1.5 节**询问用户是否允许**，并等用户明确答复。用户没有允许时，本节整节不适用，全部走原生多模态逐页判读。答复与候选范围（A / B1 / B2 / B3）要写进 `progress.md`。
 
+> **选型先看** [parser-landscape.md](parser-landscape.md)：同类工具的横向对比、值得加的第二意见、以及明确不要碰的陷阱。本节讲"怎么接"，那份讲"接哪个"。
+
 ## 1. 定位与推荐用法
 
 用户口中的 “MineU” 通常指 **MinerU**（opendatalab/MinerU，现由 `mineru` 包提供；`magic-pdf` 是已停止维护的旧名，不要调用）。

@@ -235,6 +235,13 @@ python -X utf8 scripts/run_optional_extractor.py <project> <source.pdf> --tool m
 两个容易踩的坑：``--pages`` 必须显式给出（MinerU 默认只解析前 10 页；全书用 ``--all-pages``）；``mineru parse`` 是**服务客户端**，未起服务时会直接报 ``server_not_running``——运行器因此优先使用无状态、直接写文件的 ``mineru-kit parse``（同目录自动发现）。模型默认在 ``~/.mineru/models``，多个项目与虚拟环境共用，只下载一次。
 
 也可以先用 `scripts/probe_optional_tools.py` 检查 Marker、Docling、Surya、PDF-Extract-Kit 或局部公式工具。再从目录页、普通正文、公式密集页、选择题页、图表页和疑难页中选少量代表页；不要把整本 PDF 或整页候选 Markdown 一次送入上下文。
+
+**要不要再加一个"第二意见"工具**：同一页用两条不同技术路线的实现各跑一遍，差异处就是该人工核对的地方——价值在**错误不相关**，不在分数高低。选型（含"哪些明确不要碰"）见 [parser-landscape.md](references/practice/parser-landscape.md)。没有页范围参数的工具（PaddleOCR-VL、PP-StructureV3 等）先用切页脚本缩小输入：
+
+```powershell
+python -X utf8 scripts/extract_page_range.py <project> <source.pdf> --pages 12-14 --output tmp/tool-probes/paddleocr_vl/p012-014.pdf
+```
+
 结构工具最多先选一个，必要时再对窄裁公式区域加一个公式候选工具。统一运行器只允许写入
 `tmp/tool-probes/`，默认有三重输出上限：单个候选文件 32 MiB、候选文件数 256、候选总量
 128 MiB；真实执行前会检查当前 CLI 的 `--help` 参数契约，任一上限超出或检查失败都停在候选层。
@@ -487,6 +494,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - [latex-pitfalls.md](references/practice/latex-pitfalls.md)：字体字距、分页节奏、页眉页脚、图形绘制、公式编号、警告分类等回归陷阱。
 - [choice-layout.md](references/practice/choice-layout.md)：中文教材选择题的统一入口、自动布局边界、公式/图形特殊模式与视觉验收。
 - [extraction-toolchain.md](references/practice/extraction-toolchain.md)：MinerU 等文档解析器的安装、探测、证据边界与冲突处理；解析器产出候选，最终内容仍须经视觉复核。
+- [parser-landscape.md](references/practice/parser-landscape.md)：同类解析器选型——谁值得加、谁是陷阱、无页范围参数时怎么切页；含模型下载源可达性与许可提示。
 
 ### 治理层 `references/governance/`
 
@@ -512,6 +520,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - `scripts/pdf_backend.py`：PyMuPDF 的单一导入入口（所有脚本共用，避免各自写 fallback）。
 - `scripts/setup_mineru.py`：MinerU 环境体检与一次性安装（`--status` / `--locate` / `--install` / `--download-models` / `--write-config`）；只读体检默认不装、不下载。
 - `scripts/mineru_env.py`：MinerU 可执行文件的统一发现顺序（显式参数 → 环境变量 → 项目配置 → `PATH` → 常见虚拟环境），供安装脚本与运行器共用。
+- `scripts/extract_page_range.py`：把 PDF 的显式页范围导出成 `tmp/` 下的小 PDF；供**没有页范围参数**的候选工具（PaddleOCR-VL、PP-StructureV3 等）缩小输入，只读对象搬运、不做 OCR。
 - `scripts/probe_optional_tools.py`：只读探测本机可选 PDF/公式解析器的命令和 Python 包版本；包含 MinerU、Marker、Docling、Surya、PDF-Extract-Kit、Nougat 与局部公式工具；不读 PDF、不执行转换、不把外部结果写入正文。
 - `scripts/run_optional_extractor.py`：在明确页范围、超时和 `tmp/tool-probes/` 输出边界内运行已探测到的候选工具（`--mineru-exe` 可显式指定 MinerU）；真实运行先校验 CLI `--help` 契约，只生成候选证据清单，禁止把结果直接写入正文或 `.tex`。
 

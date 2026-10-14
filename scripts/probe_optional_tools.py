@@ -23,6 +23,12 @@ COMMAND_CANDIDATES = {
     "marker": ("marker_single", "marker"),
     "docling": ("docling",),
     "nougat": ("nougat",),
+    # 第四家 VLM 系 OCR：页范围参数是真的（实测 --page-range），自带中数示例。
+    # 权重是改过的 OpenRAIL-M，默认 vllm 后端要起服务；用 --method hf 才纯本地。
+    "chandra": ("chandra",),
+    # 中文原生、体量最小（0.9B / 约 1.9 GB）、Apache-2.0；但**没有页范围参数**，
+    # 必须先 extract_page_range.py 切小 PDF。
+    "paddleocr_vl": ("paddleocr",),
     # Surya is an image-level locator (OCR/layout/order), not a PDF-to-LaTeX
     # converter. It is still useful for deciding which narrow crop to inspect.
     "surya": ("surya_ocr", "surya_layout", "surya_order", "surya_table"),
@@ -36,6 +42,8 @@ PACKAGE_CANDIDATES = {
     "marker": ("marker", "marker_pdf"),
     "docling": ("docling", "docling_core"),
     "nougat": ("nougat", "nougat_ocr"),
+    "chandra": ("chandra", "chandra_ocr"),
+    "paddleocr_vl": ("paddleocr", "paddle"),
     "surya": ("surya",),
     "pdf_extract_kit": ("pdf_extract_kit",),
     "pix2text": ("pix2text",),
@@ -71,6 +79,28 @@ TOOL_METADATA = {
         "category": "experimental-scientific-candidate",
         "preferred_for": ["英文科学文献结构候选", "公式候选"],
         "fit_for_chinese_scans": "weak",
+    },
+    "chandra": {
+        "category": "layout-structure-candidate",
+        "preferred_for": ["中文数学页候选", "表格候选", "页范围直读", "手写体"],
+        "fit_for_chinese_scans": "candidate",
+        "notes": (
+            "自带中数示例；--page-range 可直接用。权重为改版 OpenRAIL-M，"
+            "默认 vllm 后端需要服务，本地推理用 --method hf。"
+        ),
+        "runner_entrypoints": {"page_scoped": "chandra <pdf> <out> --page-range"},
+        "runner_page_index": "1-based",
+    },
+    "paddleocr_vl": {
+        "category": "layout-structure-candidate",
+        "preferred_for": ["中文正文候选", "版面分区", "表格候选", "公式候选"],
+        "fit_for_chinese_scans": "strong",
+        "notes": (
+            "中文原生、0.9B 最小体量、Apache-2.0；没有页范围参数，"
+            "必须先用 extract_page_range.py 切出小 PDF 再喂。"
+        ),
+        "runner_entrypoints": {"whole_document": "paddleocr doc_parser -i <pdf>"},
+        "runner_page_index": "no-page-range",
     },
     "surya": {
         "category": "image-region-candidate",
