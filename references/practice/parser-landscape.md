@@ -2,6 +2,8 @@
 
 本文件回答"除了 MinerU 还有什么、什么时候该换"。**使用任何工具前都必须先拿到用户的 OCR 授权**（见 [decision-gates.md](../governance/decision-gates.md) 第 1.5 节）。
 
+> **实测数据**见 [parser-benchmark.md](parser-benchmark.md)：本机同页对照的耗时、产物与分歧点。选型应以那份为准，本节给的是范围与陷阱。
+
 ## 1. 一条决定性约束：先看网络能不能下载到模型
 
 模型权重决定工具能不能真正跑起来，而下载源常常是瓶颈。**开工前先实测**，不要看文档假设：
@@ -64,6 +66,13 @@ python -X utf8 -c "import socket;[print(h, end=' ') or socket.create_connection(
 2. **需要页范围直读且能接受许可限制** → 加 **Chandra**（`--page-range` 是真的）。
 3. **公式密集的教材** → 加 **Pix2Text**，只用于 `--region` 窄裁图。
 4. **想少装东西** → Docling 适配器**已经写好**，装个包就能用，顺带得到 `--show-layout` 的区域图。
+
+**本机实测后的修正**（详见 [parser-benchmark.md](parser-benchmark.md)）：
+
+- PaddleOCR 质量确实好，但 **CPU 上单页 11–40 分钟**（server 模型更慢、mobile 模型约 11 分钟），比 MinerU 慢两个数量级；它值得当"表格/公式第二意见"按页抽查，**不适合整本批跑**。
+- PaddleOCR 的独有价值是**表格直接输出 HTML + 内嵌 LaTeX**；MinerU 会把部分表格塞成 base64 图片，需要时用 PaddleOCR 补。
+- Pix2Text 的**整页中文不可用**（实测明显错字），但公式识别正确——严格按"只喂窄裁公式图"使用。
+- 实测直接抓到两家在**同一个表格单元格上给出不同数字**，这是"多源比对 + 逐页复核"必要性的硬证据。
 
 > 实践建议：先只上 1 个第二意见工具，在 3–8 张代表页上和 MinerU 对跑，**比较差异而不是比较分数**。若差异不能给你新的定位信息，就不要保留第二个工具——多个候选互相污染比单一候选更贵。
 

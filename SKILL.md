@@ -495,6 +495,7 @@ python <skill>/scripts/renumber_pages.py <project> --front 1-6 --front-modules c
 - [choice-layout.md](references/practice/choice-layout.md)：中文教材选择题的统一入口、自动布局边界、公式/图形特殊模式与视觉验收。
 - [extraction-toolchain.md](references/practice/extraction-toolchain.md)：MinerU 等文档解析器的安装、探测、证据边界与冲突处理；解析器产出候选，最终内容仍须经视觉复核。
 - [parser-landscape.md](references/practice/parser-landscape.md)：同类解析器选型——谁值得加、谁是陷阱、无页范围参数时怎么切页；含模型下载源可达性与许可提示。
+- [parser-benchmark.md](references/practice/parser-benchmark.md)：解析器**本机实测**记录——同页对照的耗时、产物质量与分歧点；选型与"第二意见"取舍以实测为准。
 
 ### 治理层 `references/governance/`
 

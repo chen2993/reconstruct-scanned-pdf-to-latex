@@ -197,10 +197,22 @@ python -X utf8 scripts/run_optional_extractor.py <project> <input.pdf> `
 
 ## 8. 版本与可复现记录
 
+### 8.1 已知安装陷阱（实测，照抄可省几小时）
+
+这些是本机实装时踩到的真问题，按原样记录：
+
+- **PaddleOCR 只装 `paddleocr` 不够**：`PPStructureV3` 会抛 `DependencyError`，要按提示补 `pip install "paddlex[ocr]==<与 paddlex 同版本>"`。
+- **Paddle CPU 上的 oneDNN 崩溃**：本机 `paddlepaddle 3.3.1` 在默认 MKLDNN/oneDNN 路径抛 `NotImplementedError: ConvertPirAttribute2RuntimeAttribute ...`。构建 pipeline 时传 **`enable_mkldnn=False`** 即可（该键在 `parse_common_args` 白名单内；`enable_new_ir`、`run_mode` **不在**白名单，传了会报 `Unknown argument`）。
+- **`paddleocr` CLI 的 `api` 子命令是云端调用**：本地解析必须走 Python API（`PPStructureV3` / `PaddleOCRVL`），不要用 `api`，否则违反"不用云端 OCR"的硬规则。
+- **Pix2Text 的依赖冲突**：传递依赖 `rapidocr` 3.10 移除了 `cnstd` 需要的 `resolve_model_key`，`import pix2text` 直接失败；**钉 `rapidocr==3.9.2`**。
+- **模型下载源**：先按第 1 节实测可达性。HuggingFace 不通时，Pix2Text 走镜像、PaddleOCR 走官方源、MinerU 用 `MINERU_MODEL_SOURCE` 切换。
+
+### 8.2 记录模板
+
 每次启用可选工具都记录：
 
 ```text
-tool: MinerU | Marker | Docling | Surya | PDF-Extract-Kit | Pix2Text | Pix2TeX | Texify
+tool: MinerU | PaddleOCR | Marker | Docling | Surya | PDF-Extract-Kit | Pix2Text | Pix2TeX | Texify
 command: <实际命令>
 version: <命令或包版本>
 backend: <pipeline/VLM/CPU/GPU 等，如可确认>
