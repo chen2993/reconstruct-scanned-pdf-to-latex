@@ -130,6 +130,39 @@ TOOL_METADATA = {
 FORMULA_COMMAND_CANDIDATES = ("pix2text", "pix2tex_cli", "pix2tex", "texify")
 
 
+def gpu_probe() -> dict[str, object]:
+    """只读报告 GPU 是否存在——决定 PaddleOCR 走 GPU 还是 CPU（差约 77×）。
+
+    只用 ``nvidia-smi`` 查询，不导入 torch/paddle、不分配显存、不触发任何下载。
+    """
+
+    executable = shutil.which("nvidia-smi")
+    if not executable:
+        return {"available": False, "reason": "未发现 nvidia-smi"}
+    try:
+        result = subprocess.run(
+            [
+                executable,
+                "--query-gpu=name,memory.total,driver_version",
+                "--format=csv,noheader",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=8,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"available": False, "reason": type(exc).__name__}
+    if result.returncode != 0 or not result.stdout.strip():
+        return {"available": False, "reason": "nvidia-smi 无输出"}
+    return {
+        "available": True,
+        "devices": [line.strip() for line in result.stdout.strip().splitlines()],
+    }
+
+
 def command_version(path: str) -> dict[str, object]:
     """Probe only a version flag; never pass a document path or shell command."""
     attempts: list[dict[str, object]] = []
@@ -213,6 +246,7 @@ def probe() -> dict[str, object]:
         "ran_conversion": False,
         "python": sys.version.split()[0],
         "platform": platform.platform(),
+        "gpu": gpu_probe(),
         "tools": tools,
     }
 

@@ -206,6 +206,7 @@ python -X utf8 scripts/run_optional_extractor.py <project> <input.pdf> `
 - **`paddleocr` CLI 的 `api` 子命令是云端调用**：本地解析必须走 Python API（`PPStructureV3` / `PaddleOCRVL`），不要用 `api`，否则违反"不用云端 OCR"的硬规则。
 - **Pix2Text 的依赖冲突**：传递依赖 `rapidocr` 3.10 移除了 `cnstd` 需要的 `resolve_model_key`，`import pix2text` 直接失败；**钉 `rapidocr==3.9.2`**。
 - **模型下载源**：先按第 1 节实测可达性。HuggingFace 不通时，Pix2Text 走镜像、PaddleOCR 走官方源、MinerU 用 `MINERU_MODEL_SOURCE` 切换。
+- **PaddleOCR 务必用 GPU**：同一页 CPU 约 40 分钟、GPU 约 31 秒（**差约 77×**），显存只要约 2.7 GB。装法见 [parser-benchmark.md](parser-benchmark.md) 第 6 节；`paddlepaddle-gpu` 的当前版本只在 Paddle 官方索引上，PyPI 上只有旧版。探针现在会报告 `gpu` 字段，先看它再决定 `device="gpu"` 还是 `"cpu"`。
 
 ### 8.2 记录模板
 
